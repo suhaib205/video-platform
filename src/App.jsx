@@ -208,7 +208,14 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-50 pb-20" dir="rtl">
         <header className="bg-white border-b p-4 px-8 flex justify-between items-center sticky top-0 z-50 shadow-sm">
-           <button onClick={() => setView('dashboard')} className="text-indigo-600 font-bold hover:underline">معاينة الطالب &larr;</button>
+           <div className="flex items-center gap-3">
+             <button onClick={() => setView('dashboard')} className="text-indigo-600 font-bold hover:bg-indigo-50 px-4 py-2 rounded-xl transition-colors">
+               معاينة الطالب &larr;
+             </button>
+             <button onClick={() => alert('النظام يقوم بالحفظ التلقائي دائماً. تم تأكيد حفظ جميع تعديلاتك بنجاح!')} className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-4 py-2 rounded-xl transition-all shadow-sm flex items-center gap-2 text-sm">
+               <CheckCircle size={18}/> حفظ التعديلات
+             </button>
+           </div>
            <h1 className="text-xl font-bold text-slate-800">لوحة تحكم المدير</h1>
         </header>
 
@@ -230,7 +237,12 @@ export default function App() {
                   <input className="text-xl font-bold w-full outline-none border-b-2 border-transparent focus:border-indigo-400" value={course.title} onChange={e => saveCourse({...course, title: e.target.value})}/>
                   <input className="text-sm text-slate-500 w-full outline-none px-1" value={course.description} onChange={e => saveCourse({...course, description: e.target.value})}/>
                 </div>
-                <button onClick={() => deleteCourse(course.id)} className="text-red-400 p-2 hover:bg-red-50 rounded-xl transition-colors"><Trash2 size={20}/></button>
+                <div className="flex items-center gap-2 mr-4">
+                  <button onClick={() => alert('تم حفظ بيانات الدورة بنجاح!')} className="text-emerald-600 bg-emerald-50 hover:bg-emerald-100 p-2 px-4 rounded-xl transition-colors flex items-center gap-2 text-sm font-bold">
+                    <CheckCircle size={18}/> حفظ
+                  </button>
+                  <button onClick={() => deleteCourse(course.id)} className="text-red-400 p-2 hover:bg-red-50 rounded-xl transition-colors"><Trash2 size={20}/></button>
+                </div>
               </div>
 
               <div className="space-y-4 pt-6 border-t border-slate-50">
@@ -379,7 +391,6 @@ export default function App() {
 
       <main className="p-8 md:p-16 max-w-7xl mx-auto relative">
         <div className="mb-16 text-center sm:text-right relative">
-          {/* التعديل: تغيير اسم الأكاديمية هنا فقط مع المحافظة على التنسيق */}
           <h2 className="text-4xl font-black text-slate-900 mb-3 tracking-tight italic uppercase">Pass your <span className="text-indigo-600 underline decoration-indigo-200 decoration-8 underline-offset-8">license</span></h2>
           <p className="text-slate-400 text-lg font-medium italic tracking-tight opacity-70">Professional Hub for Advanced Professional Education.</p>
         </div>

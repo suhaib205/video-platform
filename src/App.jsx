@@ -80,13 +80,14 @@ export default function App() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // مراقبة حالة المستخدم
+  // مراقبة حالة المستخدم وتحديد الأدمن
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       if (u) {
         setUser(u);
-        // التعديل المطلوب: تم تغيير الإيميل هنا ليكون lexer626@gmail.com هو المدير
-        setIsAdmin(u.email === 'lexer626@gmail.com'); 
+        // التعديل المطلوب: تحديد إيميلك الخاص وتجاهل حالة الأحرف الكبيرة أو الصغيرة
+        const adminEmail = 'lexer626@gmail.com'.toLowerCase().trim();
+        setIsAdmin(u.email.toLowerCase().trim() === adminEmail); 
         setView('dashboard');
       } else {
         setUser(null);
@@ -121,17 +122,22 @@ export default function App() {
     e.preventDefault();
     setError('');
     setLoading(true);
+    // تنظيف الإيميل قبل الإرسال لـ Firebase
+    const cleanEmail = email.toLowerCase().trim();
+
     try {
       if (isRegister) {
-        await createUserWithEmailAndPassword(auth, email, password);
+        await createUserWithEmailAndPassword(auth, cleanEmail, password);
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        await signInWithEmailAndPassword(auth, cleanEmail, password);
       }
     } catch (err) {
       if (err.code === 'auth/configuration-not-found') {
         setError('خطأ: يرجى تفعيل Email/Password في إعدادات Firebase Authentication');
+      } else if (err.code === 'auth/invalid-credential') {
+        setError('بيانات الدخول غير صحيحة. تأكد من الإيميل وكلمة المرور أو قم بإنشاء الحساب أولاً.');
       } else {
-        setError('خطأ في الدخول: تأكد من الإيميل وكلمة المرور (6 خانات)');
+        setError('خطأ في الدخول: تأكد من صحة البيانات (كلمة المرور 6 خانات على الأقل)');
       }
     } finally {
       setLoading(false);
@@ -166,29 +172,29 @@ export default function App() {
           <div className="bg-[#1e293b] p-10 text-center text-white">
             <ShieldAlert size={60} className="text-indigo-500 mx-auto mb-4" />
             <h1 className="text-2xl font-bold">المنصة التعليمية الآمنة</h1>
-            {/* التعديل المطلوب: تحديث النص الإرشادي */}
-            <p className="text-slate-400 mt-2 text-sm">أدخل بياناتك للمتابعة (أو استخدم lexer626@gmail.com كمدير)</p>
+            {/* التعديل المطلوب: تم حذف ذكر إيميل المدير هنا للحفاظ على الخصوصية */}
+            <p className="text-slate-400 mt-2 text-sm">أدخل بياناتك للمتابعة للوصول إلى المنصة</p>
           </div>
           <form onSubmit={handleAuth} className="p-8 space-y-5">
             {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs font-bold border border-red-100 text-center leading-relaxed">{error}</div>}
             
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 mr-2">البريد الإلكتروني</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-4 bg-slate-50 border rounded-2xl outline-none focus:ring-2 ring-indigo-500 text-left" dir="ltr" required />
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-4 bg-slate-50 border rounded-2xl outline-none focus:ring-2 ring-indigo-500 text-left" dir="ltr" placeholder="example@mail.com" required />
             </div>
 
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 mr-2">كلمة المرور</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-4 bg-slate-50 border rounded-2xl outline-none focus:ring-2 ring-indigo-500 text-left" dir="ltr" required />
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-4 bg-slate-50 border rounded-2xl outline-none focus:ring-2 ring-indigo-500 text-left" dir="ltr" placeholder="••••••••" required />
             </div>
 
             <button disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-bold shadow-lg shadow-indigo-100 transition-all flex justify-center items-center gap-2">
               <LogIn size={20} />
-              {loading ? 'جاري التحقق...' : (isRegister ? 'إنشاء حساب طالب' : 'تسجيل الدخول')}
+              {loading ? 'جاري التحقق...' : (isRegister ? 'أنشئ حساباً جديداً' : 'تسجيل الدخول')}
             </button>
             
-            <button type="button" onClick={() => setIsRegister(!isRegister)} className="w-full text-slate-500 text-sm font-medium hover:text-indigo-600 transition-colors">
-              {isRegister ? 'لديك حساب بالفعل؟ سجل دخولك' : 'لا تملك حساباً؟ أنشئ حساباً كطالب'}
+            <button type="button" onClick={() => { setIsRegister(!isRegister); setError(''); }} className="w-full text-slate-500 text-sm font-medium hover:text-indigo-600 transition-colors">
+              {isRegister ? 'لديك حساب بالفعل؟ سجل دخولك' : 'لا تملك حساباً؟ أنشئ حساب طالب جديد'}
             </button>
           </form>
         </div>
@@ -350,7 +356,7 @@ export default function App() {
         <div className="flex items-center gap-3">
            <div className="text-right hidden md:block">
               <p className="text-xs font-bold text-slate-400">مرحباً بك</p>
-              <p className="text-sm font-black text-slate-800">{user.email.split('@')[0]}</p>
+              <p className="text-sm font-black text-slate-800">{user.email ? user.email.split('@')[0] : 'User'}</p>
            </div>
            <ShieldAlert className="text-indigo-600" size={32}/>
         </div>

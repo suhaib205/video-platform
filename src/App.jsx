@@ -83,9 +83,15 @@ export default function App() {
     const unsub = onAuthStateChanged(auth, (u) => {
       if (u) {
         setUser(u);
-        // التعديل الجوهري: بريد صهيب هو الآدمن الوحيد
+        // التحقق من بريد الآدمن بدقة
         const adminEmail = 'lexer626@gmail.com'.toLowerCase();
-        setIsAdmin(u.email.toLowerCase() === adminEmail); 
+        const currentEmail = u.email ? u.email.toLowerCase().trim() : '';
+        
+        if (currentEmail === adminEmail) {
+          setIsAdmin(true);
+        } else {
+          setIsAdmin(false);
+        }
         setView('dashboard');
       } else {
         setUser(null);
@@ -96,7 +102,7 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // جلب المحتوى الدراسي (Real-time Database Sync)
+  // جلب المحتوى الدراسي
   useEffect(() => {
     if (!user) return;
     const coursesRef = collection(db, 'artifacts', APP_ID, 'public', 'data', 'courses');
@@ -106,7 +112,7 @@ export default function App() {
     return () => unsub();
   }, [user]);
 
-  // جلب تقدم الطالب (Private User Data)
+  // جلب تقدم الطالب
   useEffect(() => {
     if (!user || isAdmin) return;
     const progRef = doc(db, 'artifacts', APP_ID, 'users', user.uid, 'settings', 'progress');
@@ -120,24 +126,31 @@ export default function App() {
     e.preventDefault();
     setError('');
     setLoading(true);
+    const targetEmail = email.toLowerCase().trim();
+
     try {
       if (isRegister) {
-        // إنشاء حساب جديد (يجب عمل هذه الخطوة أولاً لإيميل lexer626)
-        await createUserWithEmailAndPassword(auth, email.trim(), password);
+        // خطوة إنشاء الحساب: ضرورية جداً إذا لم تسجل إيميلك بعد في Firebase
+        await createUserWithEmailAndPassword(auth, targetEmail, password);
       } else {
-        // تسجيل دخول عادي
-        await signInWithEmailAndPassword(auth, email.trim(), password);
+        // خطوة تسجيل الدخول
+        await signInWithEmailAndPassword(auth, targetEmail, password);
       }
     } catch (err) {
-      console.error(err.code);
-      if (err.code === 'auth/user-not-found') {
-        setError('هذا البريد غير مسجل. يرجى الضغط على "أنشئ حساب طالب جديد" بالأسفل أولاً.');
+      console.error("Firebase Auth Error Code:", err.code);
+      // ترجمة الأخطاء البرمجية إلى رسائل مفهومة للمستخدم
+      if (err.code === 'auth/invalid-credential') {
+        setError('بيانات الدخول غير صحيحة. تأكد من كلمة المرور أو أنك قمت بإنشاء الحساب أولاً.');
+      } else if (err.code === 'auth/user-not-found') {
+        setError('هذا الحساب غير موجود. يرجى الضغط على "أنشئ حساب طالب جديد" بالأسفل.');
       } else if (err.code === 'auth/wrong-password') {
-        setError('كلمة المرور غير صحيحة، يرجى المحاولة مرة أخرى.');
-      } else if (err.code === 'auth/invalid-email') {
-        setError('تنسيق البريد الإلكتروني غير صحيح.');
+        setError('كلمة المرور غير صحيحة.');
+      } else if (err.code === 'auth/email-already-in-use') {
+        setError('هذا البريد مسجل مسبقاً، يرجى تسجيل الدخول مباشرة.');
+      } else if (err.code === 'auth/weak-password') {
+        setError('كلمة المرور ضعيفة جداً (يجب أن تكون 6 أحرف على الأقل).');
       } else {
-        setError(`خطأ: ${err.message}`);
+        setError('حدث خطأ أثناء الاتصال بالخادم. يرجى المحاولة لاحقاً.');
       }
     } finally {
       setLoading(false);
@@ -164,7 +177,7 @@ export default function App() {
     }
   };
 
-  // --- واجهة تسجيل الدخول (Premium High-End UI) ---
+  // --- واجهة تسجيل الدخول ---
   if (view === 'login') {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6" dir="rtl">
@@ -178,24 +191,48 @@ export default function App() {
           </div>
           
           <form onSubmit={handleAuth} className="p-10 space-y-6">
-            {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs font-bold border border-red-100 text-center leading-relaxed">{error}</div>}
+            {error && (
+              <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs font-bold border border-red-100 text-center leading-relaxed">
+                {error}
+              </div>
+            )}
             
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 mr-2 uppercase tracking-widest">البريد الإلكتروني</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 ring-indigo-500 text-left transition-all" dir="ltr" placeholder="lexer626@gmail.com" required />
+              <input 
+                type="email" 
+                value={email} 
+                onChange={e => setEmail(e.target.value)} 
+                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 ring-indigo-500 text-left transition-all font-medium" 
+                dir="ltr" 
+                placeholder="lexer626@gmail.com" 
+                required 
+              />
             </div>
 
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 mr-2 uppercase tracking-widest">كلمة المرور</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 ring-indigo-500 text-left transition-all" dir="ltr" placeholder="••••••••" required />
+              <input 
+                type="password" 
+                value={password} 
+                onChange={e => setPassword(e.target.value)} 
+                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 ring-indigo-500 text-left transition-all font-medium" 
+                dir="ltr" 
+                placeholder="••••••••" 
+                required 
+              />
             </div>
 
             <button disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black shadow-xl shadow-indigo-100 transition-all flex justify-center items-center gap-3 active:scale-95 disabled:opacity-50">
               {loading ? <Activity className="animate-spin" size={20} /> : <LogIn size={20} />}
-              {loading ? 'Processing...' : (isRegister ? 'إنشاء حساب جديد' : 'دخول آمن للمنصة')}
+              {loading ? 'جاري التحقق...' : (isRegister ? 'أنشئ حسابك كمدير/طالب' : 'دخول آمن للمنصة')}
             </button>
             
-            <button type="button" onClick={() => { setIsRegister(!isRegister); setError(''); }} className="w-full text-slate-500 text-xs font-bold hover:text-indigo-600 transition-colors uppercase">
+            <button 
+              type="button" 
+              onClick={() => { setIsRegister(!isRegister); setError(''); }} 
+              className="w-full text-slate-500 text-xs font-bold hover:text-indigo-600 transition-colors uppercase"
+            >
               {isRegister ? 'لديك حساب بالفعل؟ سجل دخولك' : 'لا تملك حساباً؟ أنشئ حساب طالب جديد'}
             </button>
           </form>
@@ -204,24 +241,24 @@ export default function App() {
     );
   }
 
-  // --- واجهة الأدمن (للأستاذ صهيب فقط) ---
+  // --- واجهة الأدمن (تعديل المحتوى) ---
   if (view === 'admin' && isAdmin) {
     return (
-      <div className="min-h-screen bg-[#f8fafc] pb-32" dir="rtl">
-        <header className="bg-white border-b p-6 px-10 flex justify-between items-center sticky top-0 z-50 backdrop-blur-md bg-white/80">
-           <button onClick={() => setView('dashboard')} className="text-indigo-600 font-black text-xs flex items-center gap-2 bg-indigo-50 px-5 py-2.5 rounded-2xl hover:bg-indigo-100 transition-all">
-              معاينة كطالب <BookOpen size={16}/>
+      <div className="min-h-screen bg-slate-50 pb-20 font-sans" dir="rtl">
+        <header className="bg-white border-b p-5 px-10 flex justify-between items-center sticky top-0 z-50 shadow-sm backdrop-blur-md bg-white/90">
+           <button onClick={() => setView('dashboard')} className="text-indigo-600 font-black text-sm hover:bg-indigo-50 px-5 py-2.5 rounded-2xl transition-all flex items-center gap-2 border border-indigo-100">
+             <BookOpen size={18}/> معاينة كطالب
            </button>
-           <h1 className="text-xl font-black text-slate-800 tracking-tighter uppercase">لوحة تحكم المدير</h1>
+           <h1 className="text-xl font-black text-slate-800 tracking-tighter uppercase">لوحة تحكم صهيب</h1>
         </header>
 
         <main className="p-8 max-w-5xl mx-auto space-y-10">
           <button 
             onClick={() => {
               const id = Date.now().toString();
-              saveCourse({ id, title: 'دورة جديدة', description: 'أضف وصفاً هنا..', sections: [] });
+              saveCourse({ id, title: 'دورة تعليمية جديدة', description: 'أضف وصفاً مختصراً هنا ليظهر للطلاب.', sections: [] });
             }}
-            className="w-full bg-white border-2 border-dashed border-slate-200 p-12 rounded-[3rem] text-slate-400 font-bold hover:border-indigo-400 hover:text-indigo-500 transition-all flex items-center justify-center gap-4 shadow-sm group"
+            className="w-full bg-white border-2 border-dashed border-slate-300 p-10 rounded-[2.5rem] text-slate-400 font-bold hover:border-indigo-400 hover:text-indigo-500 transition-all flex items-center justify-center gap-4 shadow-sm group"
           >
             <Plus size={32} className="group-hover:scale-110 transition-transform" /> إضافة دورة تعليمية جديدة للمنصة
           </button>
@@ -233,16 +270,16 @@ export default function App() {
                   <input className="text-2xl font-black w-full outline-none border-b-2 border-transparent focus:border-indigo-400 pb-1 text-slate-800" value={course.title} onChange={e => saveCourse({...course, title: e.target.value})}/>
                   <input className="text-sm text-slate-400 font-bold w-full outline-none px-2" value={course.description} onChange={e => saveCourse({...course, description: e.target.value})}/>
                 </div>
-                <button onClick={() => deleteCourse(course.id)} className="text-red-300 p-4 hover:bg-red-50 hover:text-red-500 rounded-2xl transition-all"><Trash2 size={24}/></button>
+                <button onClick={() => deleteCourse(course.id)} className="text-red-400 p-4 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={24}/></button>
               </div>
 
               <div className="space-y-6 pt-8 border-t border-slate-50">
                 <div className="flex justify-between items-center mb-4">
-                   <h3 className="font-black text-slate-700 text-sm uppercase tracking-widest italic">Curriculum Builder</h3>
+                   <h3 className="font-black text-slate-700 text-sm uppercase tracking-widest italic">Modules & Lessons</h3>
                    <button onClick={() => {
                      const sections = [...(course.sections||[]), {id: Date.now().toString(), title: 'عنوان القسم الجديد', lessons: []}];
                      saveCourse({...course, sections});
-                   }} className="text-xs bg-indigo-600 text-white px-5 py-2.5 rounded-2xl font-black shadow-lg shadow-indigo-100 active:scale-95 transition-all">إضافة قسم +</button>
+                   }} className="text-xs bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-indigo-100 active:scale-95 transition-all">إضافة قسم +</button>
                 </div>
 
                 {course.sections?.map(section => (
@@ -259,20 +296,20 @@ export default function App() {
                             const sections = course.sections.map(s => s.id === section.id ? {...s, lessons: s.lessons.map(l => l.id === lesson.id ? {...l, title: e.target.value} : l)} : s);
                             saveCourse({...course, sections});
                           }}/>
-                          <input className="flex-[4] p-3 text-[11px] outline-none font-mono text-indigo-600 bg-slate-50 rounded-xl" value={lesson.videoUrl} placeholder="Direct MP4 URL" dir="ltr" onChange={e => {
+                          <input className="flex-[4] p-3 text-[11px] outline-none font-mono text-indigo-600 bg-slate-50 rounded-xl border border-transparent focus:border-indigo-100" value={lesson.videoUrl} placeholder="Direct MP4 URL (Link)" dir="ltr" onChange={e => {
                             const sections = course.sections.map(s => s.id === section.id ? {...s, lessons: s.lessons.map(l => l.id === lesson.id ? {...l, videoUrl: e.target.value} : l)} : s);
                             saveCourse({...course, sections});
                           }}/>
                           <button onClick={() => {
                             const sections = course.sections.map(s => s.id === section.id ? {...s, lessons: s.lessons.filter(l => l.id !== lesson.id)} : s);
                             saveCourse({...course, sections});
-                          }} className="text-red-200 hover:text-red-500 p-2 transition-colors"><Trash2 size={18}/></button>
+                          }} className="text-red-200 hover:text-red-500 p-2"><Trash2 size={18}/></button>
                         </div>
                       ))}
                       <button onClick={() => {
-                        const sections = course.sections.map(s => s.id === section.id ? {...s, lessons: [...(s.lessons||[]), {id: Date.now().toString(), title: 'درس جديد', videoUrl: ''}]} : s);
+                        const sections = course.sections.map(s => s.id === section.id ? {...s, lessons: [...(s.lessons||[]), {id: Date.now().toString(), title: 'فيديو جديد', videoUrl: ''}]} : s);
                         saveCourse({...course, sections});
-                      }} className="text-xs text-indigo-600 font-black mt-4 hover:bg-white px-5 py-3 rounded-2xl transition-all border border-indigo-100 inline-flex items-center gap-2 shadow-sm">
+                      }} className="text-xs text-indigo-600 font-black mt-4 hover:bg-indigo-100 px-5 py-3 rounded-2xl transition-all border border-indigo-100 inline-flex items-center gap-2">
                         <Plus size={16}/> أضف فيديو لهذا القسم
                       </button>
                     </div>
@@ -286,7 +323,7 @@ export default function App() {
     );
   }
 
-  // --- واجهة مشغل الفيديو (Immersive Player) ---
+  // --- واجهة مشاهدة الفيديو (Immersive Player) ---
   if (view === 'video' && activeCourse && activeLesson) {
     return (
       <div className="h-screen flex flex-col bg-[#0f172a] font-sans" dir="rtl">
@@ -334,9 +371,9 @@ export default function App() {
             ))}
             
             {!isAdmin && (
-              <button onClick={() => toggleLesson(activeLesson.id)} className={`w-full mt-12 py-7 rounded-[2.5rem] font-black shadow-2xl transition-all flex items-center justify-center gap-5 border-2 active:scale-95 ${progress.includes(activeLesson.id) ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-indigo-600 text-white border-indigo-400 hover:bg-indigo-500'}`}>
+              <button onClick={() => toggleLesson(activeLesson.id)} className={`w-full mt-12 py-7 rounded-[2.5rem] font-black shadow-2xl transition-all flex items-center justify-center gap-5 border-2 active:scale-95 ${progress.includes(activeLesson.id) ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-indigo-600 text-white border-indigo-400 hover:bg-indigo-500'}`}>
                 <CheckCircle size={28}/>
-                <span className="uppercase tracking-widest">{progress.includes(activeLesson.id) ? 'الدرس مكتمل' : 'تحديد كـ مكتمل'}</span>
+                <span className="uppercase tracking-widest">{progress.includes(activeLesson.id) ? 'Lesson Completed' : 'Mark as Finished'}</span>
               </button>
             )}
           </div>
@@ -358,13 +395,13 @@ export default function App() {
       )}
       
       <header className="bg-white/80 border-b border-slate-100 p-8 md:px-16 flex justify-between items-center sticky top-0 z-50 backdrop-blur-xl shadow-sm">
-        <button onClick={() => auth.signOut()} className="text-red-500 flex items-center gap-3 text-[11px] font-black bg-red-50 px-7 py-3 rounded-full hover:bg-red-500 hover:text-white transition-all active:scale-95 border border-red-100">
+        <button onClick={() => auth.signOut()} className="text-red-500 flex items-center gap-3 text-[11px] font-black bg-red-50 px-7 py-3 rounded-full hover:bg-red-500 hover:text-white transition-all active:scale-95 border border-red-100 shadow-sm">
           <LogOut size={16}/> SIGN OUT
         </button>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-5">
            <div className="text-right hidden sm:block leading-tight">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] mb-1 italic">Authorized Access</p>
-              <p className="text-sm font-black text-slate-900 tracking-tighter uppercase">{user.email.split('@')[0]}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] mb-1 italic leading-none">Verified Access</p>
+              <p className="text-sm font-black text-slate-900 tracking-tighter uppercase">{user.email ? user.email.split('@')[0] : 'User'}</p>
            </div>
            <div className="w-14 h-14 bg-indigo-600 rounded-[1.4rem] flex items-center justify-center shadow-xl shadow-indigo-600/20 rotate-3 transform hover:rotate-0 transition-all duration-500">
               <ShieldAlert className="text-white" size={32}/>
@@ -398,13 +435,13 @@ export default function App() {
                      </div>
                    )}
                  </div>
-                 <div className="p-16 flex-1 flex flex-col">
-                   <h3 className="font-black text-2xl mb-4 text-slate-900 group-hover:text-indigo-600 transition-colors leading-tight tracking-tight uppercase">{course.title}</h3>
+                 <div className="p-16 flex-1 flex flex-col relative bg-white">
+                   <h3 className="font-black text-2xl mb-4 text-slate-900 group-hover:text-indigo-600 transition-colors leading-tight tracking-tight uppercase line-clamp-1">{course.title}</h3>
                    <p className="text-sm text-slate-400 flex-1 leading-relaxed line-clamp-3 font-bold mb-10 italic opacity-60 tracking-tight">{course.description}</p>
                    
                    <div className="mb-10">
-                      <div className="flex justify-between text-[10px] font-black text-slate-500 mb-3 uppercase tracking-[0.2em] font-mono">
-                        <span className="italic">Progress Sync</span>
+                      <div className="flex justify-between text-[10px] font-black text-slate-500 mb-4 uppercase tracking-[0.2em] font-mono">
+                        <span className="italic">Progress Status</span>
                         <span className="text-indigo-600 font-black">{percent}%</span>
                       </div>
                       <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden shadow-inner border border-slate-50">
@@ -435,8 +472,8 @@ export default function App() {
                   <Video size={48} className="text-slate-200 animate-pulse" />
                </div>
                <div className="space-y-3">
-                 <p className="text-slate-400 font-black text-3xl tracking-tighter uppercase italic opacity-40">Library Hub Empty</p>
-                 <p className="text-slate-300 text-[11px] font-black uppercase tracking-[0.4em] tracking-widest opacity-60 font-mono">System Initializing with Primary Server</p>
+                 <p className="text-slate-400 font-black text-3xl tracking-tighter uppercase italic opacity-40 leading-none">Library Archive Empty</p>
+                 <p className="text-slate-300 text-[11px] font-black uppercase tracking-[0.4em] tracking-widest opacity-60 font-mono">Synchronizing Content with Master Server</p>
                </div>
             </div>
           )}

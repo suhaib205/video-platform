@@ -379,7 +379,8 @@ export default function App() {
 
       <main className="p-8 md:p-16 max-w-7xl mx-auto relative">
         <div className="mb-16 text-center sm:text-right relative">
-          <h2 className="text-4xl font-black text-slate-900 mb-3 tracking-tight italic uppercase">أكاديمية <span className="text-indigo-600 underline decoration-indigo-200 decoration-8 underline-offset-8">صهيب</span></h2>
+          {/* التعديل: تغيير اسم الأكاديمية هنا فقط مع المحافظة على التنسيق */}
+          <h2 className="text-4xl font-black text-slate-900 mb-3 tracking-tight italic uppercase">Pass your <span className="text-indigo-600 underline decoration-indigo-200 decoration-8 underline-offset-8">license</span></h2>
           <p className="text-slate-400 text-lg font-medium italic tracking-tight opacity-70">Professional Hub for Advanced Professional Education.</p>
         </div>
 
@@ -406,7 +407,7 @@ export default function App() {
                  </div>
                  <div className="p-10 flex-1 flex flex-col">
                    <h3 className="font-black text-2xl mb-3 text-slate-800 group-hover:text-indigo-600 transition-colors leading-tight tracking-tight uppercase line-clamp-1 leading-none">{course.title}</h3>
-                   <p className="text-sm text-slate-500 flex-1 leading-relaxed line-clamp-3 font-medium opacity-70 italic tracking-tight">{course.description}</p>
+                   <p className="text-sm text-slate-400 flex-1 leading-relaxed line-clamp-3 font-medium opacity-70 italic tracking-tight">{course.description}</p>
                    
                    <div className="mt-10 mb-8">
                       <div className="flex justify-between text-[11px] font-black text-slate-400 mb-3 uppercase tracking-widest font-mono leading-none">

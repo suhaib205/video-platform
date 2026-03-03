@@ -1,51 +1,52 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="UTF-8" />
-  <title>المنصة التعليمية</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-100">
-
-<div id="app"></div>
-
 <script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  const appDiv = document.getElementById("app");
+  appDiv.innerHTML = "<div class='p-6 text-xl font-bold'>جاري التحميل...</div>";
 
-/* 🔥 حط بيانات Firebase تبعك هون */
-const firebaseConfig = {
-  apiKey: "PUT_HERE",
-  authDomain: "PUT_HERE",
-  projectId: "PUT_HERE",
-  storageBucket: "PUT_HERE",
-  messagingSenderId: "PUT_HERE",
-  appId: "PUT_HERE"
-};
+  // ✅ تأكد أن هذه القيم ليست PUT_HERE
+  const firebaseConfig = {
+    apiKey: "AIzaSyA2w2ULCg0m9Gtgxbo63kS3_Kkh0r9QKw",
+    authDomain: "video-platform-e80f6.firebaseapp.com",
+    projectId: "video-platform-e80f6",
+    storageBucket: "video-platform-e80f6.appspot.com",
+    messagingSenderId: "624200126268",
+    appId: "1:624200126268:web:6f9f0355b2ce12aa431839"
+  };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+  async function start() {
+    try {
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const db = getFirestore(app);
 
-await signInAnonymously(auth);
+      await signInAnonymously(auth);
 
-const appDiv = document.getElementById("app");
+      const snapshot = await getDocs(collection(db, "courses"));
 
-async function loadCourses() {
-  const snapshot = await getDocs(collection(db, "courses"));
-  let html = "<h1 class='text-3xl font-bold p-6'>الدورات</h1><div class='p-6 grid gap-4'>";
-  snapshot.forEach(doc => {
-    html += `<div class='bg-white p-4 rounded shadow'>${doc.data().title}</div>`;
-  });
-  html += "</div>";
-  appDiv.innerHTML = html;
-}
+      let html = "<h1 class='text-3xl font-bold p-6'>الدورات</h1><div class='p-6 grid gap-4'>";
+      if (snapshot.empty) {
+        html += "<div class='bg-white p-4 rounded shadow'>لا يوجد دورات بعد</div>";
+      } else {
+        snapshot.forEach(d => {
+          const data = d.data();
+          html += `<div class='bg-white p-4 rounded shadow'>${data.title ?? "بدون عنوان"}</div>`;
+        });
+      }
+      html += "</div>";
+      appDiv.innerHTML = html;
 
-loadCourses();
+    } catch (err) {
+      console.error(err);
+      appDiv.innerHTML =
+        "<div class='p-6 text-red-600 font-bold'>صار خطأ، انسخ هذا النص وارسله لي:</div>" +
+        "<pre class='p-6 bg-white border rounded overflow-auto text-sm' dir='ltr'>" +
+        (err?.stack || err?.message || String(err)) +
+        "</pre>";
+    }
+  }
 
+  start();
 </script>
-
-</body>
-</html>

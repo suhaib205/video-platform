@@ -65,8 +65,6 @@ const translations = {
     courseDetails: "تفاصيل الدورة",
     curriculum: "المحتوى الدراسي",
     notes: "ملاحظاتي",
-    nextLesson: "الدرس التالي",
-    prevLesson: "الدرس السابق",
     markComplete: "تحديد كمكتمل",
     completed: "مكتمل",
     logout: "تسجيل خروج",
@@ -99,8 +97,6 @@ const translations = {
     courseDetails: "Course Details",
     curriculum: "Curriculum",
     notes: "My Notes",
-    nextLesson: "Next Lesson",
-    prevLesson: "Previous",
     markComplete: "Mark Complete",
     completed: "Completed",
     logout: "Logout",
@@ -243,19 +239,12 @@ export default function App() {
     }
   };
 
-  // دالة مطورة لالتقاط أي صيغة لرابط يوتيوب بشكل آمن (Shorts, Watch, Embed, youtu.be)
+  // استرجاع دالة اليوتيوب الأصلية التي كانت تعمل 100% بنجاح تام
   const getYoutubeEmbedUrl = (url) => {
-    if (!url || typeof url !== 'string') return null;
-    try {
-      const regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([^#&?]*).*/;
-      const match = url.match(regExp);
-      if (match && match[2].length === 11) {
-        return `https://www.youtube.com/embed/${match[2]}?rel=0&modestbranding=1`;
-      }
-    } catch (err) {
-      console.error('YouTube Parser Error:', err);
-    }
-    return null;
+    if (!url) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
   };
 
   const getCourseProgress = (course) => {
@@ -455,16 +444,16 @@ export default function App() {
                         </div>
                      </div>
 
-                     {/* الإصلاح الحاسم: إضافة e.stopPropagation() لمنع تداخل الأحداث */}
+                     {/* استرجاع منطق الزر البسيط والموثوق */}
                      <button 
                        onClick={(e) => {
                          e.stopPropagation();
-                         const firstLesson = course.sections?.find(s => s.lessons?.length > 0)?.lessons[0];
+                         const firstLesson = course.sections?.[0]?.lessons?.[0];
                          if (firstLesson) {
                            setActiveCourse(course);
                            setActiveLesson(firstLesson);
                            setView('video');
-                         } else { alert('يرجى الانتظار، لم يتم إضافة محتوى لهذه الدورة بعد.'); }
+                         } else { alert('لا يوجد دروس مضافة في هذه الدورة بعد.'); }
                        }}
                        className="w-full mt-6 bg-slate-50 hover:bg-indigo-600 text-indigo-700 hover:text-white border border-slate-200 hover:border-indigo-600 py-3 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
                      >
@@ -538,10 +527,10 @@ export default function App() {
                 </div>
               </div>
 
-              {/* إصلاح حاسم: ضمان البحث عن أول درس موجود فعلياً */}
+              {/* استرجاع منطق الزر البسيط والموثوق */}
               <button 
                 onClick={() => {
-                  const firstLesson = activeCourse.sections?.find(s => s.lessons?.length > 0)?.lessons[0];
+                  const firstLesson = activeCourse.sections?.[0]?.lessons?.[0];
                   if (firstLesson) {
                     setActiveLesson(firstLesson);
                     setView('video');
@@ -585,19 +574,9 @@ export default function App() {
     );
   }
 
-  // --- VIEW: VIDEO PLAYER (Immersive) ---
+  // --- VIEW: VIDEO PLAYER (Immersive) - تم استرجاع المنطق الأصلي المستقر ---
   if (view === 'video' && activeCourse && activeLesson) {
     const youtubeUrl = getYoutubeEmbedUrl(activeLesson.videoUrl);
-    
-    let flatLessons = [];
-    (activeCourse.sections || []).forEach(s => {
-      (s.lessons || []).forEach(l => flatLessons.push(l));
-    });
-    const currentIndex = flatLessons.findIndex(l => l.id === activeLesson.id);
-    // تأمين فهارس التالي والسابق لمنع الخطأ
-    const nextLesson = currentIndex >= 0 && currentIndex < flatLessons.length - 1 ? flatLessons[currentIndex + 1] : null;
-    const prevLesson = currentIndex > 0 ? flatLessons[currentIndex - 1] : null;
-
     const [activeTab, setActiveTab] = useState('curriculum'); 
     const [note, setNote] = useState(''); 
 
@@ -611,10 +590,7 @@ export default function App() {
           <div className="text-center hidden md:block">
             <h1 className="font-bold text-white text-lg">{activeCourse.title}</h1>
           </div>
-          <div className="flex gap-2">
-            <button onClick={() => prevLesson && setActiveLesson(prevLesson)} disabled={!prevLesson} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"><ArrowRight size={20}/></button>
-            <button onClick={() => nextLesson && setActiveLesson(nextLesson)} disabled={!nextLesson} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"><ArrowLeft size={20}/></button>
-          </div>
+          <div></div> {/* Empty div to balance flex-between */}
         </header>
 
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
@@ -623,14 +599,19 @@ export default function App() {
             
             <div className="flex-1 w-full h-full relative flex items-center justify-center">
               {youtubeUrl ? (
-                <iframe src={youtubeUrl} className="w-full h-full" allow="autoplay; fullscreen" allowFullScreen></iframe>
+                // تم استرجاع إعدادات الـ iframe القديمة المضمونة
+                <iframe 
+                  src={youtubeUrl} 
+                  className="w-full h-full shadow-2xl" 
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                  allowFullScreen
+                ></iframe>
               ) : activeLesson.videoUrl ? (
                 <video src={activeLesson.videoUrl} controls controlsList="nodownload" className="w-full h-full object-contain" onContextMenu={e => e.preventDefault()} />
               ) : (
                 <div className="flex flex-col items-center justify-center opacity-30">
                    <Video size={64} className="mb-4" />
                    <p className="font-bold text-lg">رابط الفيديو غير متوفر</p>
-                   <p className="text-sm opacity-70 mt-2">تأكد من إضافة رابط يوتيوب صالح من لوحة التحكم</p>
                 </div>
               )}
             </div>
@@ -748,7 +729,6 @@ export default function App() {
                 </div>
                 
                 <div className="space-y-4">
-                  {/* URL Input for Thumbnail (Reverted from Storage as requested) */}
                   <div>
                     <label className="text-xs font-bold text-slate-500 mb-1 block">صورة الغلاف (Thumbnail URL)</label>
                     <div className="flex items-center gap-3">
@@ -770,7 +750,6 @@ export default function App() {
                   </div>
                   
                   <div className="flex gap-4">
-                    {/* إخفاء التصنيفات في لوحة الأدمن بناءً على المتغير */}
                     {ENABLE_CATEGORIES && (
                       <div className="flex-1">
                         <label className="text-xs font-bold text-slate-500 mb-1 block">التصنيف (Category)</label>

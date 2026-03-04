@@ -126,8 +126,8 @@ const Watermark = ({ email }) => {
   }, []);
   return (
     <div className="absolute inset-0 pointer-events-none z-50 select-none overflow-hidden opacity-[0.15]">
-      <div className="absolute transition-all duration-[8000ms] ease-in-out text-white font-mono text-xs bg-black/50 px-3 py-1.5 rounded-full backdrop-blur-md" style={pos}>
-        {email} | {new Date().toLocaleDateString('en-GB')}
+      <div className="absolute transition-all duration-[8000ms] ease-in-out text-white font-mono text-xs bg-black/50 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/10" style={pos}>
+        {email || 'Student'} | {new Date().toLocaleDateString('en-GB')}
       </div>
     </div>
   );
@@ -243,20 +243,19 @@ export default function App() {
     }
   };
 
-  // تحسين دالة استخراج رابط يوتيوب لتدعم جميع الأشكال
+  // دالة مطورة لالتقاط أي صيغة لرابط يوتيوب بشكل آمن (Shorts, Watch, Embed, youtu.be)
   const getYoutubeEmbedUrl = (url) => {
-    if (!url) return null;
-    
-    // التعبير النمطي (Regex) لالتقاط جميع أشكال روابط يوتيوب:
-    // youtube.com/watch?v=ID
-    // youtu.be/ID
-    // youtube.com/embed/ID
-    // youtube.com/shorts/ID
-    const regExp = /^(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/;
-    const match = url.match(regExp);
-
-    // إذا وجدنا الـ ID المكون من 11 حرف، نقوم بإرجاع رابط الـ embed الصحيح
-    return (match && match[1]) ? `https://www.youtube.com/embed/${match[1]}?rel=0&modestbranding=1` : null;
+    if (!url || typeof url !== 'string') return null;
+    try {
+      const regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([^#&?]*).*/;
+      const match = url.match(regExp);
+      if (match && match[2].length === 11) {
+        return `https://www.youtube.com/embed/${match[2]}?rel=0&modestbranding=1`;
+      }
+    } catch (err) {
+      console.error('YouTube Parser Error:', err);
+    }
+    return null;
   };
 
   const getCourseProgress = (course) => {
@@ -378,7 +377,7 @@ export default function App() {
             )}
             <div className="text-right hidden sm:block">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">{t.welcome}</p>
-              <p className="text-sm font-black text-slate-700 leading-none truncate max-w-[120px]">{user.email?.split('@')[0]}</p>
+              <p className="text-sm font-black text-slate-700 leading-none truncate max-w-[120px]">{user?.email?.split('@')[0] || 'User'}</p>
             </div>
             <button onClick={() => auth.signOut()} className="bg-red-50 text-red-500 p-2.5 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-sm">
               <LogOut size={18}/>
@@ -442,7 +441,7 @@ export default function App() {
                      </div>
                    </div>
                    
-                   <div className="p-6 flex-1 flex flex-col">
+                   <div className="p-6 flex-1 flex flex-col relative">
                      <h3 className="font-black text-xl mb-2 text-slate-800 group-hover:text-indigo-600 transition-colors line-clamp-1">{course.title}</h3>
                      <p className="text-sm text-slate-500 mb-6 line-clamp-2 leading-relaxed">{course.description}</p>
                      
@@ -455,6 +454,26 @@ export default function App() {
                           <div className="bg-indigo-600 h-full rounded-full transition-all duration-1000" style={{ width: `${percent}%` }}></div>
                         </div>
                      </div>
+
+                     {/* الإصلاح الحاسم: إضافة e.stopPropagation() لمنع تداخل الأحداث */}
+                     <button 
+                       onClick={(e) => {
+                         e.stopPropagation();
+                         const firstLesson = course.sections?.find(s => s.lessons?.length > 0)?.lessons[0];
+                         if (firstLesson) {
+                           setActiveCourse(course);
+                           setActiveLesson(firstLesson);
+                           setView('video');
+                         } else { alert('يرجى الانتظار، لم يتم إضافة محتوى لهذه الدورة بعد.'); }
+                       }}
+                       className="w-full mt-6 bg-slate-50 hover:bg-indigo-600 text-indigo-700 hover:text-white border border-slate-200 hover:border-indigo-600 py-3 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
+                     >
+                       {percent > 0 ? (
+                         <>متابعة التعلم <PlayCircle size={18}/></>
+                       ) : (
+                         <>ابدأ التعلم الآن <Play size={18}/></>
+                       )}
+                     </button>
                    </div>
                  </div>
                );
@@ -519,9 +538,10 @@ export default function App() {
                 </div>
               </div>
 
+              {/* إصلاح حاسم: ضمان البحث عن أول درس موجود فعلياً */}
               <button 
                 onClick={() => {
-                  const firstLesson = activeCourse.sections?.[0]?.lessons?.[0];
+                  const firstLesson = activeCourse.sections?.find(s => s.lessons?.length > 0)?.lessons[0];
                   if (firstLesson) {
                     setActiveLesson(firstLesson);
                     setView('video');
@@ -570,10 +590,13 @@ export default function App() {
     const youtubeUrl = getYoutubeEmbedUrl(activeLesson.videoUrl);
     
     let flatLessons = [];
-    activeCourse.sections?.forEach(s => s.lessons?.forEach(l => flatLessons.push(l)));
+    (activeCourse.sections || []).forEach(s => {
+      (s.lessons || []).forEach(l => flatLessons.push(l));
+    });
     const currentIndex = flatLessons.findIndex(l => l.id === activeLesson.id);
-    const nextLesson = flatLessons[currentIndex + 1];
-    const prevLesson = flatLessons[currentIndex - 1];
+    // تأمين فهارس التالي والسابق لمنع الخطأ
+    const nextLesson = currentIndex >= 0 && currentIndex < flatLessons.length - 1 ? flatLessons[currentIndex + 1] : null;
+    const prevLesson = currentIndex > 0 ? flatLessons[currentIndex - 1] : null;
 
     const [activeTab, setActiveTab] = useState('curriculum'); 
     const [note, setNote] = useState(''); 
@@ -596,7 +619,7 @@ export default function App() {
 
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
           <div className="flex-1 flex flex-col relative bg-black overflow-hidden">
-            <Watermark email={user.email} />
+            <Watermark email={user?.email || 'Student'} />
             
             <div className="flex-1 w-full h-full relative flex items-center justify-center">
               {youtubeUrl ? (
@@ -606,7 +629,8 @@ export default function App() {
               ) : (
                 <div className="flex flex-col items-center justify-center opacity-30">
                    <Video size={64} className="mb-4" />
-                   <p className="font-bold">رابط الفيديو غير متوفر</p>
+                   <p className="font-bold text-lg">رابط الفيديو غير متوفر</p>
+                   <p className="text-sm opacity-70 mt-2">تأكد من إضافة رابط يوتيوب صالح من لوحة التحكم</p>
                 </div>
               )}
             </div>

@@ -263,7 +263,7 @@ export default function App() {
       saveCourse({ ...course, thumbnailUrl: downloadURL });
     } catch (error) {
       console.error("Upload error:", error);
-      alert("حدث خطأ أثناء رفع الصورة. يرجى التأكد من إعدادات Storage Rules.");
+      alert("حدث خطأ أثناء رفع الصورة. يرجى التأكد من إعدادات قواعد Storage (Storage Rules) في Firebase.");
     } finally {
       setUploadingImageId(null);
     }
@@ -421,7 +421,6 @@ export default function App() {
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 pr-12 pl-4 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium transition-all"
                 />
               </div>
-              {/* إخفاء التصنيفات بناءً على المتغير */}
               {ENABLE_CATEGORIES && (
                 <select 
                   value={filterCategory} 
@@ -545,7 +544,8 @@ export default function App() {
                     setView('video');
                   } else { alert('لا يوجد محتوى مضاف بعد.'); }
                 }}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl font-bold shadow-xl shadow-indigo-200 transition-all flex items-center justify-center gap-3 w-full md:w-auto text-lg active:scale-95"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl font-bold shadow-xl shadow-indigo-200 transition-all flex items-center justify-center gap-3 w-full md:w-auto text-lg active:scale-95 disabled:opacity-50"
+                disabled={totalLessons === 0}
               >
                 <PlayCircle size={24} /> {percent > 0 ? t.continueWatching : t.startCourse}
               </button>
@@ -810,7 +810,7 @@ export default function App() {
                         saveCourse({...course, sections});
                       }}/>
                       <button onClick={() => {
-                        if(confirm('حذف الفصل بدروسه؟')) {
+                        if(window.confirm('حذف الفصل بدروسه؟')) {
                           const sections = course.sections.filter(s => s.id !== section.id);
                           saveCourse({...course, sections});
                         }

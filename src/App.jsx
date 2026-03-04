@@ -239,12 +239,20 @@ export default function App() {
     }
   };
 
-  // استرجاع دالة اليوتيوب الأصلية التي كانت تعمل 100% بنجاح تام
+  // ✅ الخوارزمية الجبارة الجديدة لالتقاط أي رابط يوتيوب بشكل دقيق 100%
   const getYoutubeEmbedUrl = (url) => {
-    if (!url) return null;
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
+    if (!url || typeof url !== 'string') return null;
+    try {
+      // Regex قوي يغطي: youtube.com/watch, youtu.be, youtube.com/shorts, youtube.com/embed
+      const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/);
+      if (match && match[1]) {
+        // match[1] هو الـ ID الخاص بالفيديو المكون من 11 حرف
+        return `https://www.youtube.com/embed/${match[1]}?rel=0&modestbranding=1`;
+      }
+    } catch (error) {
+      console.error("YouTube parsing error:", error);
+    }
+    return null;
   };
 
   const getCourseProgress = (course) => {
@@ -444,7 +452,6 @@ export default function App() {
                         </div>
                      </div>
 
-                     {/* استرجاع منطق الزر البسيط والموثوق */}
                      <button 
                        onClick={(e) => {
                          e.stopPropagation();
@@ -527,7 +534,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* استرجاع منطق الزر البسيط والموثوق */}
               <button 
                 onClick={() => {
                   const firstLesson = activeCourse.sections?.[0]?.lessons?.[0];
@@ -574,7 +580,7 @@ export default function App() {
     );
   }
 
-  // --- VIEW: VIDEO PLAYER (Immersive) - تم استرجاع المنطق الأصلي المستقر ---
+  // --- VIEW: VIDEO PLAYER (Immersive) ---
   if (view === 'video' && activeCourse && activeLesson) {
     const youtubeUrl = getYoutubeEmbedUrl(activeLesson.videoUrl);
     const [activeTab, setActiveTab] = useState('curriculum'); 
@@ -590,7 +596,7 @@ export default function App() {
           <div className="text-center hidden md:block">
             <h1 className="font-bold text-white text-lg">{activeCourse.title}</h1>
           </div>
-          <div></div> {/* Empty div to balance flex-between */}
+          <div></div> 
         </header>
 
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
@@ -599,11 +605,11 @@ export default function App() {
             
             <div className="flex-1 w-full h-full relative flex items-center justify-center">
               {youtubeUrl ? (
-                // تم استرجاع إعدادات الـ iframe القديمة المضمونة
                 <iframe 
+                  key={activeLesson.id} // ✅ هذا السطر يمنع الشاشة البيضاء ويجبر المتصفح على التحديث
                   src={youtubeUrl} 
-                  className="w-full h-full shadow-2xl" 
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                  className="w-full h-full shadow-2xl border-0" 
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
                   allowFullScreen
                 ></iframe>
               ) : activeLesson.videoUrl ? (

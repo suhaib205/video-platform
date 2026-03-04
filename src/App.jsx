@@ -60,9 +60,8 @@ const translations = {
     engineering: "هندسي",
     business: "أعمال",
     myCourses: "دوراتي التعليمية",
-    continueWatching: "أكمل من حيث توقفت",
-    startCourse: "ابدأ التعلم",
-    courseDetails: "تفاصيل الدورة",
+    continueWatching: "متابعة التعلم",
+    startCourse: "ابدأ التعلم الآن",
     curriculum: "المحتوى الدراسي",
     notes: "ملاحظاتي",
     markComplete: "تحديد كمكتمل",
@@ -94,7 +93,6 @@ const translations = {
     myCourses: "My Courses",
     continueWatching: "Resume",
     startCourse: "Start Learning",
-    courseDetails: "Course Details",
     curriculum: "Curriculum",
     notes: "My Notes",
     markComplete: "Mark Complete",
@@ -143,7 +141,7 @@ export default function App() {
   const [courses, setCourses] = useState([]);
   const [progress, setProgress] = useState([]); 
   
-  const [view, setView] = useState('login'); 
+  const [view, setView] = useState('login'); // login, dashboard, video, admin
   const [activeCourse, setActiveCourse] = useState(null);
   const [activeLesson, setActiveLesson] = useState(null);
 
@@ -160,7 +158,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
 
-  // Video Player State (Moved here to follow Rules of Hooks)
+  // Video Player State
   const [activeTab, setActiveTab] = useState('curriculum'); 
   const [note, setNote] = useState(''); 
 
@@ -251,7 +249,7 @@ export default function App() {
     }
   };
 
-  // ✅ YouTube parser updated with youtube-nocookie and enablejsapi=1
+  // YouTube parser
   const getYoutubeEmbedUrl = (url) => {
     if (!url || typeof url !== 'string') return null;
     try {
@@ -283,6 +281,42 @@ export default function App() {
       [newArray[index + 1], newArray[index]] = [newArray[index], newArray[index + 1]];
     }
     return newArray;
+  };
+
+  // ✅ الخوارزمية الذكية للانتقال المباشر للدرس المناسب (Smart Resume)
+  const handleCourseClick = (course) => {
+    let targetLesson = null;
+    let foundUncompleted = false;
+
+    // البحث عن أول درس غير مكتمل
+    if (course.sections) {
+      for (const section of course.sections) {
+        if (section.lessons) {
+          for (const lesson of section.lessons) {
+            if (!targetLesson) targetLesson = lesson; // كخيار احتياطي نحتفظ بأول درس
+            if (!progress.includes(lesson.id)) {
+              targetLesson = lesson;
+              foundUncompleted = true;
+              break;
+            }
+          }
+        }
+        if (foundUncompleted) break;
+      }
+    }
+
+    if (targetLesson) {
+      setActiveCourse(course);
+      setActiveLesson(targetLesson);
+      setView('video');
+    } else if (course.sections?.[0]?.lessons?.[0]) {
+      // إذا أكمل كل شيء، نعيده للدرس الأول
+      setActiveCourse(course);
+      setActiveLesson(course.sections[0].lessons[0]);
+      setView('video');
+    } else {
+      alert(isRTL ? 'لا يوجد محتوى مضاف لهذه الدورة بعد.' : 'No content added to this course yet.');
+    }
   };
 
   const globalFontStyles = `
@@ -432,7 +466,11 @@ export default function App() {
                const lessonCount = course.sections?.reduce((acc, s) => acc + (s.lessons?.length || 0), 0) || 0;
 
                return (
-                 <div key={course.id} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] transition-all duration-300 overflow-hidden flex flex-col group cursor-pointer" onClick={() => { setActiveCourse(course); setView('courseDetails'); }}>
+                 <div 
+                   key={course.id} 
+                   className="bg-white rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] transition-all duration-300 overflow-hidden flex flex-col group cursor-pointer" 
+                   onClick={() => handleCourseClick(course)}
+                 >
                    <div className="h-48 bg-slate-100 relative overflow-hidden">
                      {course.thumbnailUrl ? (
                        <img src={course.thumbnailUrl} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
@@ -466,19 +504,14 @@ export default function App() {
                      <button 
                        onClick={(e) => {
                          e.stopPropagation();
-                         const firstLesson = course.sections?.[0]?.lessons?.[0];
-                         if (firstLesson) {
-                           setActiveCourse(course);
-                           setActiveLesson(firstLesson);
-                           setView('video');
-                         } else { alert('لا يوجد دروس مضافة في هذه الدورة بعد.'); }
+                         handleCourseClick(course);
                        }}
                        className="w-full mt-6 bg-slate-50 hover:bg-indigo-600 text-indigo-700 hover:text-white border border-slate-200 hover:border-indigo-600 py-3 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
                      >
                        {percent > 0 ? (
-                         <>متابعة التعلم <PlayCircle size={18}/></>
+                         <>{t.continueWatching} <PlayCircle size={18}/></>
                        ) : (
-                         <>ابدأ التعلم الآن <Play size={18}/></>
+                         <>{t.startCourse} <Play size={18}/></>
                        )}
                      </button>
                    </div>
@@ -493,99 +526,6 @@ export default function App() {
                <p className="text-slate-600 font-bold text-xl">لا توجد دورات مطابقة للبحث حالياً.</p>
             </div>
           )}
-        </main>
-      </div>
-    );
-  }
-
-  // --- VIEW: COURSE DETAILS ---
-  if (view === 'courseDetails' && activeCourse) {
-    const percent = getCourseProgress(activeCourse);
-    const totalLessons = activeCourse.sections?.reduce((acc, s) => acc + (s.lessons?.length || 0), 0) || 0;
-
-    return (
-      <div className="min-h-screen bg-[#f8fafc] font-sans pb-20" dir={isRTL ? "rtl" : "ltr"}>
-        <style>{globalFontStyles}</style>
-        <header className="bg-white border-b px-6 py-4 flex items-center sticky top-0 z-40 shadow-sm">
-          <button onClick={() => { setActiveCourse(null); setView('dashboard'); }} className="text-slate-500 hover:text-indigo-600 font-bold flex items-center gap-2 transition-colors">
-            {isRTL ? <ArrowRight size={20}/> : <ArrowLeft size={20}/>} عودة للمسارات
-          </button>
-        </header>
-
-        <main className="max-w-5xl mx-auto mt-10 p-6 space-y-8">
-          <div className="bg-white rounded-[2.5rem] p-8 md:p-12 shadow-sm border border-slate-100 flex flex-col md:flex-row gap-10 items-center">
-            <div className="w-full md:w-1/3 aspect-[4/3] rounded-3xl overflow-hidden shadow-lg bg-slate-100 flex-shrink-0">
-               {activeCourse.thumbnailUrl ? (
-                 <img src={activeCourse.thumbnailUrl} alt={activeCourse.title} className="w-full h-full object-cover" />
-               ) : (
-                 <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center">
-                    <BookOpen size={64} className="text-white/50" />
-                 </div>
-               )}
-            </div>
-            <div className="flex-1 space-y-6">
-              {ENABLE_CATEGORIES && (
-                <div className="inline-block bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg text-xs font-bold mb-2">
-                  {activeCourse.category || 'عام'}
-                </div>
-              )}
-              <h1 className="text-3xl md:text-4xl font-black text-slate-900 leading-tight">{activeCourse.title}</h1>
-              <p className="text-slate-600 text-lg leading-relaxed">{activeCourse.description}</p>
-              
-              <div className="flex flex-wrap gap-6 py-4 border-y border-slate-100">
-                <div className="space-y-1">
-                  <p className="text-xs font-bold text-slate-400 uppercase">الدروس</p>
-                  <p className="font-bold text-slate-800">{totalLessons} درس</p>
-                </div>
-                <div className="space-y-1 w-full md:w-auto flex-1 min-w-[200px]">
-                  <p className="text-xs font-bold text-slate-400 uppercase mb-2">التقدم ({percent}%)</p>
-                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                    <div className="bg-indigo-600 h-full rounded-full" style={{ width: `${percent}%` }}></div>
-                  </div>
-                </div>
-              </div>
-
-              <button 
-                onClick={() => {
-                  const firstLesson = activeCourse.sections?.[0]?.lessons?.[0];
-                  if (firstLesson) {
-                    setActiveLesson(firstLesson);
-                    setView('video');
-                  } else { alert('لا يوجد محتوى مضاف بعد.'); }
-                }}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl font-bold shadow-xl shadow-indigo-200 transition-all flex items-center justify-center gap-3 w-full md:w-auto text-lg active:scale-95 disabled:opacity-50"
-                disabled={totalLessons === 0}
-              >
-                <PlayCircle size={24} /> {percent > 0 ? t.continueWatching : t.startCourse}
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100">
-            <h2 className="text-2xl font-black text-slate-800 mb-8 flex items-center gap-3">
-              <BookOpen size={24} className="text-indigo-500"/> {t.curriculum}
-            </h2>
-            <div className="space-y-6">
-              {activeCourse.sections?.map((s, i) => (
-                <div key={s.id} className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <div className="bg-slate-50 p-5 border-b border-slate-200 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800">الفصل {i + 1}: {s.title}</h3>
-                    <span className="text-xs font-bold text-slate-500 bg-white px-3 py-1 rounded-lg border">{s.lessons?.length || 0} دروس</span>
-                  </div>
-                  <div className="divide-y divide-slate-100">
-                    {s.lessons?.map((l, j) => (
-                      <div key={l.id} className="p-4 px-6 flex items-center gap-4 hover:bg-slate-50 transition-colors">
-                        {progress.includes(l.id) ? <CheckCircle size={20} className="text-emerald-500"/> : <PlayCircle size={20} className="text-slate-300"/>}
-                        <span className={`font-medium text-sm flex-1 ${progress.includes(l.id) ? 'text-slate-500 line-through' : 'text-slate-700'}`}>
-                          {j + 1}. {l.title}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </main>
       </div>
     );
@@ -607,8 +547,8 @@ export default function App() {
       <div className="h-screen flex flex-col bg-[#0B0F19] text-slate-200 font-sans" dir={isRTL ? "rtl" : "ltr"}>
         <style>{globalFontStyles}</style>
         <header className="p-4 px-6 border-b border-white/10 flex justify-between items-center bg-[#0B0F19] z-20">
-          <button onClick={() => setView('courseDetails')} className="text-slate-400 hover:text-white font-bold flex items-center gap-2 transition-colors">
-            {isRTL ? <ArrowRight size={18}/> : <ArrowLeft size={18}/>} عودة لتفاصيل الدورة
+          <button onClick={() => { setActiveCourse(null); setView('dashboard'); }} className="text-slate-400 hover:text-white font-bold flex items-center gap-2 transition-colors">
+            {isRTL ? <ArrowRight size={18}/> : <ArrowLeft size={18}/>} {isRTL ? 'العودة للمسارات' : 'Back to Courses'}
           </button>
           <div className="text-center hidden md:block">
             <h1 className="font-bold text-white text-lg">{activeCourse.title}</h1>
@@ -661,8 +601,8 @@ export default function App() {
           
           <div className="w-full lg:w-[400px] border-l border-white/10 bg-[#0F1523] flex flex-col z-10">
             <div className="flex border-b border-white/10">
-              <button onClick={() => setActiveTab('curriculum')} className={`flex-1 p-4 text-sm font-bold border-b-2 transition-colors ${activeTab === 'curriculum' ? 'border-indigo-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>المحتوى</button>
-              <button onClick={() => setActiveTab('notes')} className={`flex-1 p-4 text-sm font-bold border-b-2 transition-colors ${activeTab === 'notes' ? 'border-indigo-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>ملاحظاتي</button>
+              <button onClick={() => setActiveTab('curriculum')} className={`flex-1 p-4 text-sm font-bold border-b-2 transition-colors ${activeTab === 'curriculum' ? 'border-indigo-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>{t.curriculum}</button>
+              <button onClick={() => setActiveTab('notes')} className={`flex-1 p-4 text-sm font-bold border-b-2 transition-colors ${activeTab === 'notes' ? 'border-indigo-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>{t.notes}</button>
             </div>
             
             <div className="flex-1 overflow-y-auto hide-scroll p-2">
@@ -692,14 +632,13 @@ export default function App() {
 
               {activeTab === 'notes' && (
                 <div className="p-6 h-full flex flex-col">
-                  <h3 className="font-bold text-white mb-4 flex items-center gap-2"><FileText size={18}/> ملاحظات خاصة بالدرس</h3>
+                  <h3 className="font-bold text-white mb-4 flex items-center gap-2"><FileText size={18}/> {t.notes}</h3>
                   <textarea 
                     className="flex-1 w-full bg-black/30 border border-white/10 rounded-xl p-4 text-sm outline-none focus:border-indigo-500 text-white resize-none"
-                    placeholder="اكتب ملاحظاتك هنا للرجوع إليها لاحقاً..."
+                    placeholder={isRTL ? "اكتب ملاحظاتك هنا للرجوع إليها لاحقاً..." : "Type your notes here..."}
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                   ></textarea>
-                  <p className="text-xs text-slate-500 mt-4 text-center">الملاحظات تحفظ محلياً في متصفحك حالياً.</p>
                 </div>
               )}
             </div>

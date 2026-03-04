@@ -160,6 +160,10 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
 
+  // Video Player State (Moved here to follow Rules of Hooks)
+  const [activeTab, setActiveTab] = useState('curriculum'); 
+  const [note, setNote] = useState(''); 
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       if (u) {
@@ -197,6 +201,14 @@ export default function App() {
     });
     return () => unsub();
   }, [user, isAdmin]);
+
+  // Reset tab and note when changing view or lesson
+  useEffect(() => {
+    if (view === 'video') {
+      setActiveTab('curriculum');
+      setNote('');
+    }
+  }, [view, activeLesson?.id]);
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -239,18 +251,17 @@ export default function App() {
     }
   };
 
-  // ✅ الخوارزمية الجبارة الجديدة لالتقاط أي رابط يوتيوب بشكل دقيق 100%
+  // ✅ YouTube parser updated with youtube-nocookie and enablejsapi=1
   const getYoutubeEmbedUrl = (url) => {
     if (!url || typeof url !== 'string') return null;
     try {
-      // Regex قوي يغطي: youtube.com/watch, youtu.be, youtube.com/shorts, youtube.com/embed
       const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/);
-      if (match && match[1]) {
-        // match[1] هو الـ ID الخاص بالفيديو المكون من 11 حرف
-        return `https://www.youtube.com/embed/${match[1]}?rel=0&modestbranding=1`;
+      if (match?.[1]) {
+        const id = match[1];
+        return `https://www.youtube-nocookie.com/embed/${id}?rel=0&modestbranding=1&enablejsapi=1`;
       }
-    } catch (error) {
-      console.error("YouTube parsing error:", error);
+    } catch (e) {
+      console.error("YouTube parsing error:", e);
     }
     return null;
   };
@@ -583,8 +594,14 @@ export default function App() {
   // --- VIEW: VIDEO PLAYER (Immersive) ---
   if (view === 'video' && activeCourse && activeLesson) {
     const youtubeUrl = getYoutubeEmbedUrl(activeLesson.videoUrl);
-    const [activeTab, setActiveTab] = useState('curriculum'); 
-    const [note, setNote] = useState(''); 
+    
+    let flatLessons = [];
+    (activeCourse.sections || []).forEach(s => {
+      (s.lessons || []).forEach(l => flatLessons.push(l));
+    });
+    const currentIndex = flatLessons.findIndex(l => l.id === activeLesson.id);
+    const nextLesson = currentIndex >= 0 && currentIndex < flatLessons.length - 1 ? flatLessons[currentIndex + 1] : null;
+    const prevLesson = currentIndex > 0 ? flatLessons[currentIndex - 1] : null;
 
     return (
       <div className="h-screen flex flex-col bg-[#0B0F19] text-slate-200 font-sans" dir={isRTL ? "rtl" : "ltr"}>
@@ -596,7 +613,10 @@ export default function App() {
           <div className="text-center hidden md:block">
             <h1 className="font-bold text-white text-lg">{activeCourse.title}</h1>
           </div>
-          <div></div> 
+          <div className="flex gap-2">
+            <button onClick={() => prevLesson && setActiveLesson(prevLesson)} disabled={!prevLesson} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"><ArrowRight size={20}/></button>
+            <button onClick={() => nextLesson && setActiveLesson(nextLesson)} disabled={!nextLesson} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"><ArrowLeft size={20}/></button>
+          </div>
         </header>
 
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
@@ -606,11 +626,12 @@ export default function App() {
             <div className="flex-1 w-full h-full relative flex items-center justify-center">
               {youtubeUrl ? (
                 <iframe 
-                  key={activeLesson.id} // ✅ هذا السطر يمنع الشاشة البيضاء ويجبر المتصفح على التحديث
+                  key={activeLesson.id}
                   src={youtubeUrl} 
                   className="w-full h-full shadow-2xl border-0" 
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
                   allowFullScreen
+                  referrerPolicy="strict-origin-when-cross-origin"
                 ></iframe>
               ) : activeLesson.videoUrl ? (
                 <video src={activeLesson.videoUrl} controls controlsList="nodownload" className="w-full h-full object-contain" onContextMenu={e => e.preventDefault()} />

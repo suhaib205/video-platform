@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   PlayCircle, BookOpen, Settings, LogOut, ShieldAlert, Lock, 
   Plus, Trash2, Video, ChevronDown, CheckCircle, UserPlus, LogIn, X, Activity, ShieldCheck, Play,
-  Eye, EyeOff, Search, Filter, Globe, ArrowUp, ArrowDown, FileText, ArrowRight, ArrowLeft, Upload, Image as ImageIcon
+  Eye, EyeOff, Search, Filter, Globe, ArrowUp, ArrowDown, FileText, ArrowRight, ArrowLeft, Image as ImageIcon
 } from 'lucide-react';
 
 // ==========================================
@@ -17,7 +17,6 @@ import {
   getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, 
   arrayUnion, arrayRemove 
 } from 'firebase/firestore';
-import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'; // إضافة مكتبة التخزين للصور
 
 const firebaseConfig = {
   apiKey: "AIzaSyCGah4UwLysOMhBQNR6ov9UJMjEUuorVOM",
@@ -31,7 +30,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const storage = getStorage(app); // تهيئة مساحة تخزين الصور
 
 const APP_ID = 'video-platform-prod';
 
@@ -166,9 +164,6 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
 
-  // Upload State
-  const [uploadingImageId, setUploadingImageId] = useState(null);
-
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       if (u) {
@@ -245,27 +240,6 @@ export default function App() {
   const deleteCourse = async (id) => {
     if (window.confirm(isRTL ? 'هل أنت متأكد من الحذف؟' : 'Are you sure you want to delete?')) {
       await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'courses', id));
-    }
-  };
-
-  // وظيفة رفع الصورة إلى Firebase Storage
-  const handleImageUpload = async (e, course) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setUploadingImageId(course.id);
-    try {
-      const fileRef = ref(storage, `thumbnails/${Date.now()}_${file.name}`);
-      const uploadTask = await uploadBytesResumable(fileRef, file);
-      const downloadURL = await getDownloadURL(fileRef);
-      
-      // حفظ الرابط الجديد في الدورة
-      saveCourse({ ...course, thumbnailUrl: downloadURL });
-    } catch (error) {
-      console.error("Upload error:", error);
-      alert("حدث خطأ أثناء رفع الصورة. يرجى التأكد من إعدادات قواعد Storage (Storage Rules) في Firebase.");
-    } finally {
-      setUploadingImageId(null);
     }
   };
 
@@ -741,9 +715,9 @@ export default function App() {
                 </div>
                 
                 <div className="space-y-4">
-                  {/* Image Upload Component */}
+                  {/* URL Input for Thumbnail (Reverted from Storage as requested) */}
                   <div>
-                    <label className="text-xs font-bold text-slate-500 mb-1 block">صورة الغلاف (Thumbnail)</label>
+                    <label className="text-xs font-bold text-slate-500 mb-1 block">صورة الغلاف (Thumbnail URL)</label>
                     <div className="flex items-center gap-3">
                       {course.thumbnailUrl ? (
                         <img src={course.thumbnailUrl} alt="Thumbnail" className="w-14 h-14 object-cover rounded-xl border border-slate-200 shadow-sm" />
@@ -752,11 +726,13 @@ export default function App() {
                           <ImageIcon size={20} />
                         </div>
                       )}
-                      <label className={`flex-1 bg-white border border-slate-200 p-3 rounded-xl cursor-pointer hover:border-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm font-bold ${uploadingImageId === course.id ? 'opacity-50 pointer-events-none' : 'text-slate-600'}`}>
-                         <Upload size={18} />
-                         {uploadingImageId === course.id ? 'جاري الرفع...' : 'رفع صورة من الجهاز'}
-                         <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, course)} disabled={uploadingImageId === course.id} />
-                      </label>
+                      <input 
+                        className="flex-1 w-full bg-white border border-slate-200 p-3 rounded-xl focus:border-indigo-500 outline-none text-sm font-medium transition-all" 
+                        dir="ltr" 
+                        placeholder="ضع رابط الصورة هنا (مثال: https://...)" 
+                        value={course.thumbnailUrl || ''} 
+                        onChange={e => saveCourse({...course, thumbnailUrl: e.target.value})}
+                      />
                     </div>
                   </div>
                   

@@ -1,21 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   PlayCircle, BookOpen, Settings, LogOut, ShieldAlert, Lock, 
-  Plus, Trash2, Video, ChevronDown, CheckCircle, UserPlus, LogIn, X, Activity, ShieldCheck, Play
+  Plus, Trash2, Video, ChevronDown, CheckCircle, UserPlus, LogIn, X, Activity, ShieldCheck, Play,
+  Eye, EyeOff, Search, Filter, Globe, ArrowUp, ArrowDown, FileText, ArrowRight, ArrowLeft, Upload, Image as ImageIcon
 } from 'lucide-react';
 
 // ==========================================
-// 1. إعدادات Firebase الخاصة بك
+// 1. Firebase Config
 // ==========================================
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, signOut 
+  signInWithEmailAndPassword, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence
 } from 'firebase/auth';
 import { 
   getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, 
   arrayUnion, arrayRemove 
 } from 'firebase/firestore';
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'; // إضافة مكتبة التخزين للصور
 
 const firebaseConfig = {
   apiKey: "AIzaSyCGah4UwLysOMhBQNR6ov9UJMjEUuorVOM",
@@ -23,64 +25,150 @@ const firebaseConfig = {
   projectId: "video-platform-d99d3",
   storageBucket: "video-platform-d99d3.firebasestorage.app",
   messagingSenderId: "31338710927",
-  appId: "1:31338710927:web:fa903a6d1804f0b7e4adfa",
-  measurementId: "G-RMLF9VC9WR"
+  appId: "1:31338710927:web:fa903a6d1804f0b7e4adfa"
 };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app); // تهيئة مساحة تخزين الصور
+
 const APP_ID = 'video-platform-prod';
 
 // ==========================================
-// 2. المكونات الأمنية (العلامة المائية)
+// 🔴 مفاتيح التحكم بالمنصة (Feature Flags) 🔴
 // ==========================================
+// قم بتغيير false إلى true إذا أردت إظهار التصنيفات مستقبلاً
+const ENABLE_CATEGORIES = false; 
 
+// ==========================================
+// 2. i18n Translations Dictionary
+// ==========================================
+const translations = {
+  ar: {
+    loginTitle: "المنصة التعليمية الآمنة",
+    loginDesc: "أدخل بياناتك للمتابعة للوصول إلى دروسك",
+    email: "البريد الإلكتروني",
+    password: "كلمة المرور",
+    rememberMe: "تذكرني",
+    loginBtn: "تسجيل الدخول",
+    registerBtn: "إنشاء حساب جديد",
+    noAccount: "لا تملك حساباً؟ أنشئ حساب طالب جديد",
+    hasAccount: "لديك حساب بالفعل؟ سجل دخولك",
+    welcome: "مرحباً بك",
+    searchPlaceholder: "ابحث عن دورة...",
+    allCategories: "جميع التخصصات",
+    medical: "طبي",
+    engineering: "هندسي",
+    business: "أعمال",
+    myCourses: "دوراتي التعليمية",
+    continueWatching: "أكمل من حيث توقفت",
+    startCourse: "ابدأ التعلم",
+    courseDetails: "تفاصيل الدورة",
+    curriculum: "المحتوى الدراسي",
+    notes: "ملاحظاتي",
+    nextLesson: "الدرس التالي",
+    prevLesson: "الدرس السابق",
+    markComplete: "تحديد كمكتمل",
+    completed: "مكتمل",
+    logout: "تسجيل خروج",
+    adminPanel: "لوحة التحكم",
+    adminOnly: "وضع المدير مفعل - تتصفح كآدمن",
+    statusPublished: "منشور",
+    statusDraft: "مسودة",
+    save: "حفظ التعديلات",
+    addCourse: "إضافة دورة جديدة"
+  },
+  en: {
+    loginTitle: "Secure Learning Platform",
+    loginDesc: "Enter your credentials to access your courses",
+    email: "Email Address",
+    password: "Password",
+    rememberMe: "Remember Me",
+    loginBtn: "Login",
+    registerBtn: "Create Account",
+    noAccount: "Don't have an account? Register here",
+    hasAccount: "Already have an account? Login",
+    welcome: "Welcome back",
+    searchPlaceholder: "Search courses...",
+    allCategories: "All Categories",
+    medical: "Medical",
+    engineering: "Engineering",
+    business: "Business",
+    myCourses: "My Courses",
+    continueWatching: "Resume",
+    startCourse: "Start Learning",
+    courseDetails: "Course Details",
+    curriculum: "Curriculum",
+    notes: "My Notes",
+    nextLesson: "Next Lesson",
+    prevLesson: "Previous",
+    markComplete: "Mark Complete",
+    completed: "Completed",
+    logout: "Logout",
+    adminPanel: "Admin Panel",
+    adminOnly: "Admin Mode Active",
+    statusPublished: "Published",
+    statusDraft: "Draft",
+    save: "Save Changes",
+    addCourse: "Add New Course"
+  }
+};
+
+// ==========================================
+// 3. Helper Components
+// ==========================================
 const Watermark = ({ email }) => {
-  const [pos, setPos] = useState({ top: '10%', left: '10%' });
-  
+  const [pos, setPos] = useState({ top: '20%', left: '20%' });
   useEffect(() => {
-    const interval = setInterval(() => {
-      setPos({ 
-        top: Math.floor(Math.random() * 80 + 5) + '%', 
-        left: Math.floor(Math.random() * 80 + 5) + '%' 
-      });
-    }, 10000);
-    return () => clearInterval(interval);
+    const i = setInterval(() => {
+      setPos({ top: Math.floor(Math.random() * 80 + 5) + '%', left: Math.floor(Math.random() * 80 + 5) + '%' });
+    }, 12000);
+    return () => clearInterval(i);
   }, []);
-
   return (
     <div className="absolute inset-0 pointer-events-none z-50 select-none overflow-hidden opacity-[0.15]">
-      <div 
-        className="absolute transition-all duration-[5000ms] ease-in-out text-white font-mono text-[10px] md:text-xs bg-black/40 px-3 py-1.5 rounded-full whitespace-nowrap backdrop-blur-md border border-white/10"
-        style={{ top: pos.top, left: pos.left }}
-      >
-        {email} | {new Date().toLocaleDateString('ar-EG')}
+      <div className="absolute transition-all duration-[8000ms] ease-in-out text-white font-mono text-xs bg-black/50 px-3 py-1.5 rounded-full backdrop-blur-md" style={pos}>
+        {email} | {new Date().toLocaleDateString('en-GB')}
       </div>
     </div>
   );
 };
 
 // ==========================================
-// 3. التطبيق الرئيسي
+// 4. Main Application
 // ==========================================
 export default function App() {
+  // Global State
+  const [lang, setLang] = useState('ar');
+  const t = translations[lang];
+  const isRTL = lang === 'ar';
+
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [courses, setCourses] = useState([]);
-  const [progress, setProgress] = useState([]);
+  const [progress, setProgress] = useState([]); 
   
   const [view, setView] = useState('login'); 
   const [activeCourse, setActiveCourse] = useState(null);
   const [activeLesson, setActiveLesson] = useState(null);
 
+  // Auth State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isRegister, setIsRegister] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // مراقبة حالة المستخدم وتحديد الأدمن
+  // Dashboard State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterCategory, setFilterCategory] = useState('all');
+
+  // Upload State
+  const [uploadingImageId, setUploadingImageId] = useState(null);
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       if (u) {
@@ -97,33 +185,27 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // جلب البيانات العامة (الدورات)
   useEffect(() => {
     if (!user) return;
     const coursesRef = collection(db, 'artifacts', APP_ID, 'public', 'data', 'courses');
     const unsub = onSnapshot(coursesRef, (snap) => {
       setCourses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => {
+      console.error("Firestore Error (Courses):", err);
     });
     return () => unsub();
   }, [user]);
 
-  // جلب بيانات الطالب الخاصة (التقدم)
   useEffect(() => {
     if (!user || isAdmin) return;
     const progRef = doc(db, 'artifacts', APP_ID, 'users', user.uid, 'settings', 'progress');
     const unsub = onSnapshot(progRef, (d) => {
       if (d.exists()) setProgress(d.data().completed || []);
+    }, (err) => {
+      console.error("Firestore Error (Progress):", err);
     });
     return () => unsub();
   }, [user, isAdmin]);
-
-  // وظيفة لتحويل روابط يوتيوب لتعمل داخل المنصة
-  const getYoutubeEmbedUrl = (url) => {
-    if (!url) return null;
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
-  };
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -132,17 +214,15 @@ export default function App() {
     const cleanEmail = email.toLowerCase().trim();
 
     try {
+      await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
+
       if (isRegister) {
         await createUserWithEmailAndPassword(auth, cleanEmail, password);
       } else {
         await signInWithEmailAndPassword(auth, cleanEmail, password);
       }
     } catch (err) {
-      if (err.code === 'auth/invalid-credential') {
-        setError('بيانات الدخول غير صحيحة. تأكد من الإيميل وكلمة المرور.');
-      } else {
-        setError('حدث خطأ في الدخول، يرجى المحاولة مرة أخرى.');
-      }
+      setError(isRTL ? 'بيانات الدخول غير صحيحة أو الحساب غير موجود.' : 'Invalid credentials or account not found.');
     } finally {
       setLoading(false);
     }
@@ -163,65 +243,120 @@ export default function App() {
   };
 
   const deleteCourse = async (id) => {
-    if (window.confirm('هل أنت متأكد من حذف هذه الدورة بالكامل؟')) {
+    if (window.confirm(isRTL ? 'هل أنت متأكد من الحذف؟' : 'Are you sure you want to delete?')) {
       await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'courses', id));
     }
   };
 
-  // حقن الخطوط العالمية في التطبيق
+  // وظيفة رفع الصورة إلى Firebase Storage
+  const handleImageUpload = async (e, course) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploadingImageId(course.id);
+    try {
+      const fileRef = ref(storage, `thumbnails/${Date.now()}_${file.name}`);
+      const uploadTask = await uploadBytesResumable(fileRef, file);
+      const downloadURL = await getDownloadURL(fileRef);
+      
+      // حفظ الرابط الجديد في الدورة
+      saveCourse({ ...course, thumbnailUrl: downloadURL });
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("حدث خطأ أثناء رفع الصورة. يرجى التأكد من إعدادات Storage Rules.");
+    } finally {
+      setUploadingImageId(null);
+    }
+  };
+
+  const getYoutubeEmbedUrl = (url) => {
+    if (!url) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}?rel=0&modestbranding=1` : null;
+  };
+
+  const getCourseProgress = (course) => {
+    let total = 0; let done = 0;
+    course.sections?.forEach(s => {
+      total += (s.lessons?.length || 0);
+      s.lessons?.forEach(l => { if(progress.includes(l.id)) done++; });
+    });
+    return total > 0 ? Math.round((done/total)*100) : 0;
+  };
+
+  const moveItem = (array, index, direction) => {
+    const newArray = [...array];
+    if (direction === 'up' && index > 0) {
+      [newArray[index - 1], newArray[index]] = [newArray[index], newArray[index - 1]];
+    } else if (direction === 'down' && index < newArray.length - 1) {
+      [newArray[index + 1], newArray[index]] = [newArray[index], newArray[index + 1]];
+    }
+    return newArray;
+  };
+
   const globalFontStyles = `
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Tajawal:wght@300;400;500;700;800;900&display=swap');
-    * {
-      font-family: 'Tajawal', 'Outfit', sans-serif;
-    }
-    .glass-effect {
-      background: rgba(255, 255, 255, 0.85);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-    }
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800;900&display=swap');
+    * { font-family: ${isRTL ? "'Tajawal', 'Outfit'" : "'Outfit', 'Tajawal'"}, sans-serif; }
+    .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.4); box-shadow: 0 10px 40px -10px rgba(0,0,0,0.08); }
+    .dark-glass { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.05); }
+    .hide-scroll::-webkit-scrollbar { display: none; }
   `;
 
-  // --- واجهة تسجيل الدخول (Premium UI) ---
+  // --- VIEW: LOGIN ---
   if (view === 'login') {
     return (
-      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-4 relative overflow-hidden" dir="rtl">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4 relative overflow-hidden" dir={isRTL ? "rtl" : "ltr"}>
         <style>{globalFontStyles}</style>
-        {/* Abstract Background Elements */}
-        <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none"></div>
-        <div className="absolute bottom-[-10%] left-[-5%] w-[400px] h-[400px] bg-blue-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+        <button onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')} className="absolute top-6 right-6 md:right-10 bg-white/50 backdrop-blur-md px-4 py-2 rounded-full shadow-sm border border-white flex items-center gap-2 text-slate-600 hover:text-indigo-600 transition-all font-bold text-sm z-50">
+          <Globe size={16} /> {lang === 'ar' ? 'English' : 'العربية'}
+        </button>
 
-        <div className="glass-effect w-full max-w-[420px] rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.08)] overflow-hidden border border-white/60 relative z-10 transition-all duration-500 hover:shadow-[0_20px_60px_-15px_rgba(79,70,229,0.15)]">
-          <div className="p-10 pb-6 text-center relative">
-            <div className="w-20 h-20 bg-gradient-to-tr from-indigo-600 to-blue-500 rounded-[1.5rem] mx-auto mb-6 flex items-center justify-center shadow-lg shadow-indigo-500/30 transform rotate-3 hover:rotate-0 transition-transform duration-500">
+        <div className="absolute top-[-10%] right-[-5%] w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none"></div>
+        <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[120px] pointer-events-none"></div>
+
+        <div className="glass-card w-full max-w-[440px] rounded-[2.5rem] overflow-hidden relative z-10 transition-all duration-500">
+          <div className="p-10 pb-6 text-center relative bg-white/50">
+            <div className="w-20 h-20 bg-gradient-to-tr from-indigo-600 to-blue-600 rounded-[1.5rem] mx-auto mb-6 flex items-center justify-center shadow-[0_10px_30px_rgba(79,70,229,0.3)]">
               <ShieldCheck size={36} className="text-white" />
             </div>
-            <h1 className="text-3xl font-black text-slate-800 tracking-tight">Pass your <span className="text-indigo-600">license</span></h1>
-            <p className="text-slate-500 mt-2 text-sm font-medium">أدخل بياناتك للمتابعة للوصول إلى دروسك</p>
+            <h1 className="text-3xl font-black text-slate-800 tracking-tight">Pass your <span className="text-indigo-600 underline decoration-indigo-200 decoration-4 underline-offset-4">license</span></h1>
+            <p className="text-slate-500 mt-2 text-sm font-medium">{t.loginDesc}</p>
           </div>
           
-          <form onSubmit={handleAuth} className="p-8 pt-2 space-y-5">
-            {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs font-bold border border-red-100 text-center leading-relaxed animate-pulse">{error}</div>}
+          <form onSubmit={handleAuth} className="p-8 pt-4 space-y-5 bg-white/30">
+            {error && <div className="bg-red-50 text-red-600 p-4 rounded-xl text-xs font-bold border border-red-100 text-center">{error}</div>}
             
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 mr-1">البريد الإلكتروني</label>
+              <label className="text-xs font-bold text-slate-600 px-1">{t.email}</label>
               <div className="relative">
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-4 bg-slate-50/50 hover:bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white text-left transition-all duration-300 font-medium" dir="ltr" placeholder="example@mail.com" required />
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 text-left font-medium transition-all" dir="ltr" placeholder="student@example.com" required />
               </div>
             </div>
 
-            <div className="space-y-1.5 pb-2">
-              <label className="text-xs font-bold text-slate-500 mr-1">كلمة المرور</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-4 bg-slate-50/50 hover:bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white text-left transition-all duration-300 font-medium" dir="ltr" placeholder="••••••••" required />
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-600 px-1">{t.password}</label>
+              <div className="relative">
+                <input type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 text-left font-medium transition-all" dir="ltr" placeholder="••••••••" required />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600">
+                  {showPassword ? <EyeOff size={20}/> : <Eye size={20}/>}
+                </button>
+              </div>
             </div>
 
-            <button disabled={loading} className="w-full bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white py-4 rounded-2xl font-bold shadow-lg shadow-indigo-500/25 transition-all flex justify-center items-center gap-2 active:scale-[0.98]">
+            <div className="flex items-center gap-2 px-1 pb-2">
+              <input type="checkbox" id="remember" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"/>
+              <label htmlFor="remember" className="text-sm font-medium text-slate-600 cursor-pointer">{t.rememberMe}</label>
+            </div>
+
+            <button disabled={loading} className="w-full bg-slate-900 hover:bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg transition-all flex justify-center items-center gap-2 active:scale-[0.98]">
               {loading ? <Activity size={20} className="animate-spin" /> : <LogIn size={20} />}
-              {loading ? 'جاري المعالجة...' : (isRegister ? 'إنشاء حساب جديد' : 'تسجيل الدخول')}
+              {loading ? '...' : (isRegister ? t.registerBtn : t.loginBtn)}
             </button>
             
-            <div className="pt-2 text-center">
+            <div className="pt-3 text-center">
               <button type="button" onClick={() => { setIsRegister(!isRegister); setError(''); }} className="text-slate-500 text-sm font-medium hover:text-indigo-600 transition-colors">
-                {isRegister ? 'لديك حساب بالفعل؟ سجل دخولك' : 'لا تملك حساباً؟ أنشئ حساب طالب جديد'}
+                {isRegister ? t.hasAccount : t.noAccount}
               </button>
             </div>
           </form>
@@ -230,93 +365,493 @@ export default function App() {
     );
   }
 
-  // --- واجهة الأدمن (Modern Dashboard UI) ---
-  if (view === 'admin' && isAdmin) {
+  // --- VIEW: DASHBOARD (Student) ---
+  if (view === 'dashboard') {
+    const filteredCourses = courses.filter(c => 
+      (!ENABLE_CATEGORIES || filterCategory === 'all' || c.category === filterCategory) &&
+      c.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      (isAdmin ? true : c.status !== 'draft') 
+    );
+
     return (
-      <div className="min-h-screen bg-[#f8fafc] pb-24" dir="rtl">
+      <div className="min-h-screen bg-[#f8fafc] font-sans" dir={isRTL ? "rtl" : "ltr"}>
         <style>{globalFontStyles}</style>
-        <header className="glass-effect border-b border-slate-200/60 p-5 px-8 flex justify-between items-center sticky top-0 z-50 shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
-           <div className="flex items-center gap-3">
-             <button onClick={() => setView('dashboard')} className="text-indigo-600 font-bold bg-indigo-50/50 hover:bg-indigo-100 px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 text-sm">
-               <BookOpen size={16} /> معاينة الطالب
-             </button>
-             <button onClick={() => alert('يتم الحفظ تلقائياً في قاعدة البيانات.')} className="bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-white font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-2 text-sm shadow-emerald-500/20">
-               <CheckCircle size={16}/> تأكيد الحفظ
-             </button>
-           </div>
-           <h1 className="text-xl font-black text-slate-800 tracking-tight">غرفة القيادة <span className="text-indigo-600 opacity-50">|</span> Admin</h1>
+        
+        <header className="glass-card sticky top-0 z-40 px-6 md:px-12 py-4 flex justify-between items-center rounded-b-3xl mx-2 md:mx-4 mt-2">
+          <div className="flex items-center gap-3">
+             <div className="w-10 h-10 bg-gradient-to-tr from-indigo-600 to-blue-500 rounded-xl flex items-center justify-center text-white shadow-md">
+                <ShieldCheck size={20}/>
+             </div>
+             <div className="hidden md:block">
+                <h1 className="font-black text-slate-800 text-lg leading-tight">Pass your <span className="text-indigo-600">license</span></h1>
+             </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {isAdmin && (
+              <button onClick={() => setView('admin')} className="hidden md:flex text-xs font-bold bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg hover:bg-indigo-100 transition-colors items-center gap-2">
+                <Settings size={14}/> {t.adminPanel}
+              </button>
+            )}
+            <div className="text-right hidden sm:block">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">{t.welcome}</p>
+              <p className="text-sm font-black text-slate-700 leading-none truncate max-w-[120px]">{user.email?.split('@')[0]}</p>
+            </div>
+            <button onClick={() => auth.signOut()} className="bg-red-50 text-red-500 p-2.5 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-sm">
+              <LogOut size={18}/>
+            </button>
+          </div>
         </header>
 
-        <main className="p-6 md:p-10 max-w-5xl mx-auto space-y-8">
-          <button 
-            onClick={() => {
-              const id = Date.now().toString();
-              saveCourse({ id, title: 'دورة جديدة', description: 'أضف وصفاً هنا', sections: [] });
-            }}
-            className="w-full bg-white border-2 border-dashed border-slate-200 p-10 rounded-[2rem] text-slate-400 font-bold hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/30 transition-all flex items-center justify-center gap-3 shadow-sm group"
-          >
-            <div className="bg-slate-50 group-hover:bg-indigo-100 p-3 rounded-full transition-colors">
-              <Plus size={24} className="group-hover:scale-110 transition-transform" /> 
+        <main className="p-6 md:p-12 max-w-[1400px] mx-auto relative space-y-10">
+          <div className="flex flex-col md:flex-row justify-between items-end gap-6 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+            <div>
+              <h2 className="text-3xl md:text-4xl font-black text-slate-900 mb-2">{t.myCourses}</h2>
+              <p className="text-slate-500 font-medium">اختر مسارك التعليمي وابدأ رحلة النجاح.</p>
             </div>
-            <span className="text-lg">إضافة دورة تعليمية جديدة</span>
-          </button>
+            
+            <div className="flex w-full md:w-auto gap-3">
+              <div className="relative flex-1 md:w-64">
+                <Search size={18} className="absolute top-1/2 -translate-y-1/2 right-4 text-slate-400" />
+                <input 
+                  type="text" 
+                  placeholder={t.searchPlaceholder} 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 pr-12 pl-4 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium transition-all"
+                />
+              </div>
+              {/* إخفاء التصنيفات بناءً على المتغير */}
+              {ENABLE_CATEGORIES && (
+                <select 
+                  value={filterCategory} 
+                  onChange={(e) => setFilterCategory(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 outline-none text-sm font-bold text-slate-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer appearance-none"
+                >
+                  <option value="all">{t.allCategories}</option>
+                  <option value="medical">{t.medical}</option>
+                  <option value="engineering">{t.engineering}</option>
+                  <option value="business">{t.business}</option>
+                </select>
+              )}
+            </div>
+          </div>
 
-          {courses.map(course => (
-            <div key={course.id} className="bg-white rounded-[2rem] p-8 lg:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden relative transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
-              <div className="flex flex-col md:flex-row justify-between items-start mb-8 gap-4">
-                <div className="flex-1 space-y-3 w-full">
-                  <input className="text-2xl lg:text-3xl font-black w-full bg-transparent outline-none border-b-2 border-transparent focus:border-indigo-500 pb-1 text-slate-800 transition-colors placeholder:text-slate-300" placeholder="عنوان الدورة..." value={course.title} onChange={e => saveCourse({...course, title: e.target.value})}/>
-                  <input className="text-sm font-medium text-slate-500 w-full bg-transparent outline-none px-1 placeholder:text-slate-300" placeholder="اكتب وصفاً مختصراً للدورة..." value={course.description} onChange={e => saveCourse({...course, description: e.target.value})}/>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {filteredCourses.map(course => {
+               const percent = getCourseProgress(course);
+               const lessonCount = course.sections?.reduce((acc, s) => acc + (s.lessons?.length || 0), 0) || 0;
+
+               return (
+                 <div key={course.id} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] transition-all duration-300 overflow-hidden flex flex-col group cursor-pointer" onClick={() => { setActiveCourse(course); setView('courseDetails'); }}>
+                   <div className="h-48 bg-slate-100 relative overflow-hidden">
+                     {course.thumbnailUrl ? (
+                       <img src={course.thumbnailUrl} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                     ) : (
+                       <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center">
+                         <BookOpen size={60} className="text-white/30 group-hover:scale-110 transition-transform duration-500" />
+                       </div>
+                     )}
+                     <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 to-transparent opacity-80"></div>
+                     
+                     <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center text-white">
+                       <span className="bg-white/20 backdrop-blur-sm px-3 py-1 rounded-lg text-xs font-bold border border-white/20">{lessonCount} دروس</span>
+                       {percent === 100 && <span className="text-emerald-400 font-bold text-xs flex items-center gap-1"><CheckCircle size={14}/> {t.completed}</span>}
+                     </div>
+                   </div>
+                   
+                   <div className="p-6 flex-1 flex flex-col">
+                     <h3 className="font-black text-xl mb-2 text-slate-800 group-hover:text-indigo-600 transition-colors line-clamp-1">{course.title}</h3>
+                     <p className="text-sm text-slate-500 mb-6 line-clamp-2 leading-relaxed">{course.description}</p>
+                     
+                     <div className="mt-auto">
+                        <div className="flex justify-between text-xs font-bold text-slate-400 mb-2">
+                          <span>التقدم</span>
+                          <span className="text-indigo-600">{percent}%</span>
+                        </div>
+                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                          <div className="bg-indigo-600 h-full rounded-full transition-all duration-1000" style={{ width: `${percent}%` }}></div>
+                        </div>
+                     </div>
+                   </div>
+                 </div>
+               );
+            })}
+          </div>
+          
+          {filteredCourses.length === 0 && (
+            <div className="py-32 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-200">
+               <BookOpen size={48} className="text-slate-300 mx-auto mb-4" />
+               <p className="text-slate-600 font-bold text-xl">لا توجد دورات مطابقة للبحث حالياً.</p>
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  }
+
+  // --- VIEW: COURSE DETAILS ---
+  if (view === 'courseDetails' && activeCourse) {
+    const percent = getCourseProgress(activeCourse);
+    const totalLessons = activeCourse.sections?.reduce((acc, s) => acc + (s.lessons?.length || 0), 0) || 0;
+
+    return (
+      <div className="min-h-screen bg-[#f8fafc] font-sans pb-20" dir={isRTL ? "rtl" : "ltr"}>
+        <style>{globalFontStyles}</style>
+        <header className="bg-white border-b px-6 py-4 flex items-center sticky top-0 z-40 shadow-sm">
+          <button onClick={() => { setActiveCourse(null); setView('dashboard'); }} className="text-slate-500 hover:text-indigo-600 font-bold flex items-center gap-2 transition-colors">
+            {isRTL ? <ArrowRight size={20}/> : <ArrowLeft size={20}/>} عودة للمسارات
+          </button>
+        </header>
+
+        <main className="max-w-5xl mx-auto mt-10 p-6 space-y-8">
+          <div className="bg-white rounded-[2.5rem] p-8 md:p-12 shadow-sm border border-slate-100 flex flex-col md:flex-row gap-10 items-center">
+            <div className="w-full md:w-1/3 aspect-[4/3] rounded-3xl overflow-hidden shadow-lg bg-slate-100 flex-shrink-0">
+               {activeCourse.thumbnailUrl ? (
+                 <img src={activeCourse.thumbnailUrl} alt={activeCourse.title} className="w-full h-full object-cover" />
+               ) : (
+                 <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center">
+                    <BookOpen size={64} className="text-white/50" />
+                 </div>
+               )}
+            </div>
+            <div className="flex-1 space-y-6">
+              {ENABLE_CATEGORIES && (
+                <div className="inline-block bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg text-xs font-bold mb-2">
+                  {activeCourse.category || 'عام'}
                 </div>
-                <div className="flex items-center gap-2">
-                   <button onClick={() => deleteCourse(course.id)} className="text-red-400 bg-red-50 p-3 hover:bg-red-500 hover:text-white rounded-xl transition-all shadow-sm"><Trash2 size={20}/></button>
+              )}
+              <h1 className="text-3xl md:text-4xl font-black text-slate-900 leading-tight">{activeCourse.title}</h1>
+              <p className="text-slate-600 text-lg leading-relaxed">{activeCourse.description}</p>
+              
+              <div className="flex flex-wrap gap-6 py-4 border-y border-slate-100">
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-slate-400 uppercase">الدروس</p>
+                  <p className="font-bold text-slate-800">{totalLessons} درس</p>
+                </div>
+                <div className="space-y-1 w-full md:w-auto flex-1 min-w-[200px]">
+                  <p className="text-xs font-bold text-slate-400 uppercase mb-2">التقدم ({percent}%)</p>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div className="bg-indigo-600 h-full rounded-full" style={{ width: `${percent}%` }}></div>
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-6 pt-8 border-t border-slate-100/80">
+              <button 
+                onClick={() => {
+                  const firstLesson = activeCourse.sections?.[0]?.lessons?.[0];
+                  if (firstLesson) {
+                    setActiveLesson(firstLesson);
+                    setView('video');
+                  } else { alert('لا يوجد محتوى مضاف بعد.'); }
+                }}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl font-bold shadow-xl shadow-indigo-200 transition-all flex items-center justify-center gap-3 w-full md:w-auto text-lg active:scale-95"
+              >
+                <PlayCircle size={24} /> {percent > 0 ? t.continueWatching : t.startCourse}
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100">
+            <h2 className="text-2xl font-black text-slate-800 mb-8 flex items-center gap-3">
+              <BookOpen size={24} className="text-indigo-500"/> {t.curriculum}
+            </h2>
+            <div className="space-y-6">
+              {activeCourse.sections?.map((s, i) => (
+                <div key={s.id} className="border border-slate-200 rounded-2xl overflow-hidden">
+                  <div className="bg-slate-50 p-5 border-b border-slate-200 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-800">الفصل {i + 1}: {s.title}</h3>
+                    <span className="text-xs font-bold text-slate-500 bg-white px-3 py-1 rounded-lg border">{s.lessons?.length || 0} دروس</span>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {s.lessons?.map((l, j) => (
+                      <div key={l.id} className="p-4 px-6 flex items-center gap-4 hover:bg-slate-50 transition-colors">
+                        {progress.includes(l.id) ? <CheckCircle size={20} className="text-emerald-500"/> : <PlayCircle size={20} className="text-slate-300"/>}
+                        <span className={`font-medium text-sm flex-1 ${progress.includes(l.id) ? 'text-slate-500 line-through' : 'text-slate-700'}`}>
+                          {j + 1}. {l.title}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // --- VIEW: VIDEO PLAYER (Immersive) ---
+  if (view === 'video' && activeCourse && activeLesson) {
+    const youtubeUrl = getYoutubeEmbedUrl(activeLesson.videoUrl);
+    
+    let flatLessons = [];
+    activeCourse.sections?.forEach(s => s.lessons?.forEach(l => flatLessons.push(l)));
+    const currentIndex = flatLessons.findIndex(l => l.id === activeLesson.id);
+    const nextLesson = flatLessons[currentIndex + 1];
+    const prevLesson = flatLessons[currentIndex - 1];
+
+    const [activeTab, setActiveTab] = useState('curriculum'); 
+    const [note, setNote] = useState(''); 
+
+    return (
+      <div className="h-screen flex flex-col bg-[#0B0F19] text-slate-200 font-sans" dir={isRTL ? "rtl" : "ltr"}>
+        <style>{globalFontStyles}</style>
+        <header className="p-4 px-6 border-b border-white/10 flex justify-between items-center bg-[#0B0F19] z-20">
+          <button onClick={() => setView('courseDetails')} className="text-slate-400 hover:text-white font-bold flex items-center gap-2 transition-colors">
+            {isRTL ? <ArrowRight size={18}/> : <ArrowLeft size={18}/>} عودة لتفاصيل الدورة
+          </button>
+          <div className="text-center hidden md:block">
+            <h1 className="font-bold text-white text-lg">{activeCourse.title}</h1>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => prevLesson && setActiveLesson(prevLesson)} disabled={!prevLesson} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"><ArrowRight size={20}/></button>
+            <button onClick={() => nextLesson && setActiveLesson(nextLesson)} disabled={!nextLesson} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"><ArrowLeft size={20}/></button>
+          </div>
+        </header>
+
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+          <div className="flex-1 flex flex-col relative bg-black overflow-hidden">
+            <Watermark email={user.email} />
+            
+            <div className="flex-1 w-full h-full relative">
+              {youtubeUrl ? (
+                <iframe src={youtubeUrl} className="w-full h-full" allow="autoplay; fullscreen" allowFullScreen></iframe>
+              ) : activeLesson.videoUrl ? (
+                <video src={activeLesson.videoUrl} controls controlsList="nodownload" className="w-full h-full object-contain" onContextMenu={e => e.preventDefault()} />
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center opacity-30">
+                   <Video size={64} className="mb-4" />
+                   <p className="font-bold">رابط الفيديو غير متوفر</p>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-[#0B0F19] border-t border-white/10 p-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-white">{activeLesson.title}</h2>
+              </div>
+              {!isAdmin && (
+                <button 
+                  onClick={() => toggleLesson(activeLesson.id)} 
+                  className={`px-6 py-3 rounded-xl font-bold transition-all flex items-center gap-2 ${progress.includes(activeLesson.id) ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
+                >
+                  <CheckCircle size={20}/>
+                  {progress.includes(activeLesson.id) ? t.completed : t.markComplete}
+                </button>
+              )}
+            </div>
+          </div>
+          
+          <div className="w-full lg:w-[400px] border-l border-white/10 bg-[#0F1523] flex flex-col z-10">
+            <div className="flex border-b border-white/10">
+              <button onClick={() => setActiveTab('curriculum')} className={`flex-1 p-4 text-sm font-bold border-b-2 transition-colors ${activeTab === 'curriculum' ? 'border-indigo-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>المحتوى</button>
+              <button onClick={() => setActiveTab('notes')} className={`flex-1 p-4 text-sm font-bold border-b-2 transition-colors ${activeTab === 'notes' ? 'border-indigo-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>ملاحظاتي</button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto hide-scroll p-2">
+              {activeTab === 'curriculum' && (
+                <div className="p-4 space-y-6">
+                  {activeCourse.sections?.map(s => (
+                    <div key={s.id} className="space-y-2">
+                      <h3 className="text-xs font-black text-slate-500 uppercase px-2 mb-3">{s.title}</h3>
+                      <div className="space-y-1">
+                        {s.lessons?.map((l, i) => (
+                          <button 
+                            key={l.id} 
+                            onClick={() => setActiveLesson(l)} 
+                            className={`w-full text-right p-4 rounded-xl text-sm transition-all flex items-start gap-3 ${activeLesson.id === l.id ? 'bg-indigo-600/20 border border-indigo-500/30 text-white' : 'hover:bg-white/5 text-slate-400'}`}
+                          >
+                            <div className="mt-0.5">
+                              {progress.includes(l.id) ? <CheckCircle size={16} className="text-emerald-500"/> : <PlayCircle size={16} className="opacity-50"/>}
+                            </div>
+                            <span className="flex-1 leading-snug">{i+1}. {l.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {activeTab === 'notes' && (
+                <div className="p-6 h-full flex flex-col">
+                  <h3 className="font-bold text-white mb-4 flex items-center gap-2"><FileText size={18}/> ملاحظات خاصة بالدرس</h3>
+                  <textarea 
+                    className="flex-1 w-full bg-black/30 border border-white/10 rounded-xl p-4 text-sm outline-none focus:border-indigo-500 text-white resize-none"
+                    placeholder="اكتب ملاحظاتك هنا للرجوع إليها لاحقاً..."
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                  ></textarea>
+                  <p className="text-xs text-slate-500 mt-4 text-center">الملاحظات تحفظ محلياً في متصفحك حالياً.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- VIEW: ADMIN (Modern Backoffice) ---
+  if (view === 'admin' && isAdmin) {
+    return (
+      <div className="min-h-screen bg-[#f1f5f9] pb-32 font-sans" dir="rtl">
+        <style>{globalFontStyles}</style>
+        <header className="bg-slate-900 text-white p-5 px-8 flex justify-between items-center sticky top-0 z-50 shadow-xl">
+           <div className="flex items-center gap-4">
+             <button onClick={() => setView('dashboard')} className="text-slate-300 hover:text-white bg-white/10 px-4 py-2 rounded-xl transition-colors flex items-center gap-2 text-sm font-bold">
+               <ArrowRight size={16} /> خروج للواجهة
+             </button>
+             <h1 className="text-xl font-black tracking-widest hidden sm:block">ADMIN <span className="text-indigo-500">WORKSPACE</span></h1>
+           </div>
+           <button onClick={() => alert('النظام يحفظ بياناتك لحظياً في Firestore')} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow-lg flex items-center gap-2 text-sm">
+             <CheckCircle size={16}/> حفظ التعديلات
+           </button>
+        </header>
+
+        <main className="p-6 md:p-10 max-w-6xl mx-auto space-y-8">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-black text-slate-800">إدارة الكورسات (Courses Meta)</h2>
+            <button 
+              onClick={() => {
+                saveCourse({ id: Date.now().toString(), title: 'عنوان الكورس الجديد', description: '', thumbnailUrl: '', category: 'medical', status: 'draft', sections: [] });
+              }}
+              className="bg-slate-800 text-white px-5 py-3 rounded-xl font-bold hover:bg-black transition-colors flex items-center gap-2 shadow-sm"
+            >
+              <Plus size={18} /> إنشاء كورس
+            </button>
+          </div>
+
+          {courses.map((course) => (
+            <div key={course.id} className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200 overflow-hidden relative mb-8">
+              
+              {/* Course Meta Data */}
+              <div className="grid md:grid-cols-2 gap-6 mb-8 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 mb-1 block">عنوان الكورس (Title)</label>
+                    <input className="w-full bg-white border border-slate-200 p-3 rounded-xl focus:border-indigo-500 outline-none font-bold" value={course.title} onChange={e => saveCourse({...course, title: e.target.value})}/>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 mb-1 block">الوصف (Description)</label>
+                    <textarea className="w-full bg-white border border-slate-200 p-3 rounded-xl focus:border-indigo-500 outline-none min-h-[80px]" value={course.description} onChange={e => saveCourse({...course, description: e.target.value})}/>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  {/* Image Upload Component */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 mb-1 block">صورة الغلاف (Thumbnail)</label>
+                    <div className="flex items-center gap-3">
+                      {course.thumbnailUrl ? (
+                        <img src={course.thumbnailUrl} alt="Thumbnail" className="w-14 h-14 object-cover rounded-xl border border-slate-200 shadow-sm" />
+                      ) : (
+                        <div className="w-14 h-14 bg-slate-200 rounded-xl flex items-center justify-center text-slate-400">
+                          <ImageIcon size={20} />
+                        </div>
+                      )}
+                      <label className={`flex-1 bg-white border border-slate-200 p-3 rounded-xl cursor-pointer hover:border-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm font-bold ${uploadingImageId === course.id ? 'opacity-50 pointer-events-none' : 'text-slate-600'}`}>
+                         <Upload size={18} />
+                         {uploadingImageId === course.id ? 'جاري الرفع...' : 'رفع صورة من الجهاز'}
+                         <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, course)} disabled={uploadingImageId === course.id} />
+                      </label>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-4">
+                    {/* إخفاء التصنيفات في لوحة الأدمن بناءً على المتغير */}
+                    {ENABLE_CATEGORIES && (
+                      <div className="flex-1">
+                        <label className="text-xs font-bold text-slate-500 mb-1 block">التصنيف (Category)</label>
+                        <select className="w-full bg-white border border-slate-200 p-3 rounded-xl outline-none font-bold" value={course.category || 'medical'} onChange={e => saveCourse({...course, category: e.target.value})}>
+                          <option value="medical">طبي</option>
+                          <option value="engineering">هندسي</option>
+                          <option value="business">أعمال</option>
+                        </select>
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <label className="text-xs font-bold text-slate-500 mb-1 block">الحالة (Status)</label>
+                      <select className="w-full bg-white border border-slate-200 p-3 rounded-xl outline-none font-bold" value={course.status || 'draft'} onChange={e => saveCourse({...course, status: e.target.value})}>
+                        <option value="draft">مسودة (Draft)</option>
+                        <option value="published">منشور (Published)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div className="col-span-full flex justify-end mt-2 border-t border-slate-200 pt-4">
+                  <button onClick={() => deleteCourse(course.id)} className="text-red-500 bg-red-50 hover:bg-red-500 hover:text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2"><Trash2 size={16}/> حذف الكورس بالكامل</button>
+                </div>
+              </div>
+
+              {/* Sections & Lessons Builder */}
+              <div className="space-y-6 border-t border-slate-200 pt-8">
                 <div className="flex justify-between items-center mb-6">
-                   <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                     <BookOpen size={18} className="text-indigo-500" /> هيكل المحتوى
+                   <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
+                     <BookOpen size={20} className="text-indigo-500" /> البناء المنهجي (Curriculum Builder)
                    </h3>
                    <button onClick={() => {
-                     const sections = [...(course.sections||[]), {id: Date.now().toString(), title: 'قسم جديد', lessons: []}];
+                     const sections = [...(course.sections||[]), {id: Date.now().toString(), title: 'فصل جديد', lessons: []}];
                      saveCourse({...course, sections});
-                   }} className="text-xs bg-slate-900 text-white hover:bg-indigo-600 px-5 py-2.5 rounded-xl font-bold transition-colors shadow-md">إضافة قسم +</button>
+                   }} className="bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white px-5 py-2.5 rounded-xl font-bold transition-colors text-sm shadow-sm">إضافة فصل (Section) +</button>
                 </div>
 
-                {course.sections?.map((section, idx) => (
-                  <div key={section.id} className="bg-slate-50/50 p-6 lg:p-8 rounded-3xl border border-slate-200/60 shadow-sm relative">
-                    <div className="absolute top-6 left-6 text-slate-200 font-black text-4xl opacity-50 pointer-events-none">{idx + 1}</div>
-                    <input className="font-black text-lg text-slate-800 bg-transparent outline-none w-full mb-6 border-b-2 border-slate-200 pb-2 focus:border-indigo-500 transition-colors placeholder:text-slate-400" placeholder="عنوان القسم..." value={section.title} onChange={e => {
-                      const sections = course.sections.map(s => s.id === section.id ? {...s, title: e.target.value} : s);
-                      saveCourse({...course, sections});
-                    }}/>
+                {course.sections?.map((section, sIdx) => (
+                  <div key={section.id} className="bg-white border border-slate-300 p-6 rounded-2xl shadow-sm">
+                    <div className="flex gap-3 mb-6">
+                      <div className="flex flex-col gap-1">
+                        <button onClick={() => saveCourse({...course, sections: moveItem(course.sections, sIdx, 'up')})} className="bg-slate-100 p-1 rounded hover:bg-slate-200"><ArrowUp size={14}/></button>
+                        <button onClick={() => saveCourse({...course, sections: moveItem(course.sections, sIdx, 'down')})} className="bg-slate-100 p-1 rounded hover:bg-slate-200"><ArrowDown size={14}/></button>
+                      </div>
+                      <input className="font-bold text-lg bg-transparent border-b-2 border-slate-200 focus:border-indigo-500 outline-none flex-1 pb-1" value={section.title} placeholder="عنوان الفصل..." onChange={e => {
+                        const sections = course.sections.map(s => s.id === section.id ? {...s, title: e.target.value} : s);
+                        saveCourse({...course, sections});
+                      }}/>
+                      <button onClick={() => {
+                        if(confirm('حذف الفصل بدروسه؟')) {
+                          const sections = course.sections.filter(s => s.id !== section.id);
+                          saveCourse({...course, sections});
+                        }
+                      }} className="text-red-300 hover:text-red-500 p-2"><Trash2 size={18}/></button>
+                    </div>
                     
-                    <div className="space-y-3">
+                    <div className="space-y-3 pl-8 border-r-2 border-indigo-100 ml-2">
                       {section.lessons?.map((lesson, lIdx) => (
-                        <div key={lesson.id} className="flex flex-col md:flex-row gap-3 items-center bg-white p-3 rounded-2xl shadow-sm border border-slate-100 hover:border-indigo-200 transition-colors group">
-                          <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl hidden md:block">
-                            <Video size={18} />
+                        <div key={lesson.id} className="flex flex-wrap md:flex-nowrap gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-200 hover:border-indigo-300 transition-colors">
+                          <div className="flex flex-col gap-1">
+                            <button onClick={() => {
+                              const newLessons = moveItem(section.lessons, lIdx, 'up');
+                              const sections = course.sections.map(s => s.id === section.id ? {...s, lessons: newLessons} : s);
+                              saveCourse({...course, sections});
+                            }} className="text-slate-400 hover:text-indigo-600"><ArrowUp size={14}/></button>
+                            <button onClick={() => {
+                              const newLessons = moveItem(section.lessons, lIdx, 'down');
+                              const sections = course.sections.map(s => s.id === section.id ? {...s, lessons: newLessons} : s);
+                              saveCourse({...course, sections});
+                            }} className="text-slate-400 hover:text-indigo-600"><ArrowDown size={14}/></button>
                           </div>
-                          <input className="w-full md:flex-[2] p-2.5 text-sm outline-none font-bold text-slate-700 bg-transparent" value={lesson.title} placeholder="عنوان الفيديو..." onChange={e => {
+                          <div className="bg-indigo-100 text-indigo-600 p-2 rounded-lg hidden md:block"><Video size={16} /></div>
+                          <input className="flex-[2] p-2 text-sm outline-none font-bold bg-white border border-slate-200 rounded-lg focus:border-indigo-500" value={lesson.title} placeholder="عنوان الدرس" onChange={e => {
                             const sections = course.sections.map(s => s.id === section.id ? {...s, lessons: s.lessons.map(l => l.id === lesson.id ? {...l, title: e.target.value} : l)} : s);
                             saveCourse({...course, sections});
                           }}/>
-                          <input className="w-full md:flex-[4] p-2.5 text-xs outline-none font-mono text-indigo-600 bg-slate-50 focus:bg-indigo-50/50 rounded-xl border border-transparent focus:border-indigo-200 transition-colors" value={lesson.videoUrl} placeholder="رابط MP4 أو YouTube" dir="ltr" onChange={e => {
+                          <input className="flex-[4] p-2 text-xs outline-none font-mono bg-white border border-slate-200 rounded-lg focus:border-indigo-500" value={lesson.videoUrl} placeholder="رابط يوتيوب أو MP4 المباشر" dir="ltr" onChange={e => {
                             const sections = course.sections.map(s => s.id === section.id ? {...s, lessons: s.lessons.map(l => l.id === lesson.id ? {...l, videoUrl: e.target.value} : l)} : s);
                             saveCourse({...course, sections});
                           }}/>
                           <button onClick={() => {
                             const sections = course.sections.map(s => s.id === section.id ? {...s, lessons: s.lessons.filter(l => l.id !== lesson.id)} : s);
                             saveCourse({...course, sections});
-                          }} className="w-full md:w-auto text-red-300 hover:text-white hover:bg-red-500 p-2.5 rounded-xl transition-colors flex justify-center"><Trash2 size={16}/></button>
+                          }} className="text-slate-400 hover:text-red-500 p-2"><X size={18}/></button>
                         </div>
                       ))}
                       <button onClick={() => {
                         const sections = course.sections.map(s => s.id === section.id ? {...s, lessons: [...(s.lessons||[]), {id: Date.now().toString(), title: 'درس جديد', videoUrl: ''}]} : s);
                         saveCourse({...course, sections});
-                      }} className="text-xs text-indigo-600 font-bold mt-4 hover:bg-indigo-50 px-4 py-2.5 rounded-xl transition-colors flex items-center gap-2 border border-indigo-100 bg-white shadow-sm">
-                        <Plus size={16}/> إضافة فيديو لهذا القسم
+                      }} className="text-xs text-indigo-600 font-bold mt-2 bg-white hover:bg-indigo-50 border border-indigo-200 px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
+                        <Plus size={14}/> إضافة درس (Lesson)
                       </button>
                     </div>
                   </div>
@@ -329,207 +864,5 @@ export default function App() {
     );
   }
 
-  // --- واجهة مشاهدة الفيديو (Cinematic Player UI) ---
-  if (view === 'video' && activeCourse && activeLesson) {
-    const youtubeUrl = getYoutubeEmbedUrl(activeLesson.videoUrl);
-
-    return (
-      <div className="h-screen flex flex-col bg-[#0B0F19]" dir="rtl">
-        <style>{globalFontStyles}</style>
-        <header className="p-5 border-b border-white/5 flex justify-between items-center bg-[#0F1523] shadow-lg z-20">
-          <button onClick={() => setView('dashboard')} className="text-indigo-400 font-bold flex items-center gap-2 hover:text-white transition-colors bg-white/5 px-4 py-2 rounded-xl">
-            &rarr; العودة للمسارات
-          </button>
-          <div className="text-right">
-            <h1 className="font-bold text-white text-lg line-clamp-1">{activeLesson.title}</h1>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{activeCourse.title}</p>
-          </div>
-        </header>
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
-          {/* Video Area */}
-          <div className="flex-1 relative flex items-center justify-center border-l border-white/5 bg-black overflow-hidden group">
-            <Watermark email={user.email} />
-            
-            {youtubeUrl ? (
-              <iframe 
-                src={youtubeUrl} 
-                className="w-full h-full shadow-2xl" 
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                allowFullScreen
-              ></iframe>
-            ) : activeLesson.videoUrl ? (
-              <video src={activeLesson.videoUrl} controls controlsList="nodownload" className="max-h-full w-full object-contain shadow-2xl" onContextMenu={e => e.preventDefault()} />
-            ) : (
-              <div className="text-center space-y-5 opacity-20">
-                 <Video size={80} className="text-white mx-auto animate-pulse" />
-                 <p className="text-white font-bold tracking-wide">رابط الفيديو غير متوفر حالياً</p>
-              </div>
-            )}
-          </div>
-          
-          {/* Playlist Sidebar */}
-          <div className="w-full lg:w-[380px] border-r border-white/5 overflow-y-auto p-6 bg-[#0F1523] space-y-8 z-10 custom-scrollbar">
-            <h2 className="font-black text-white text-lg border-b border-white/10 pb-4 flex items-center gap-2">
-              <BookOpen size={20} className="text-indigo-500" /> قائمة الدروس
-            </h2>
-            {activeCourse.sections?.map(s => (
-              <div key={s.id} className="space-y-4">
-                <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div> {s.title}
-                </h3>
-                <div className="space-y-2.5">
-                  {s.lessons?.map(l => (
-                    <button 
-                      key={l.id} 
-                      onClick={() => setActiveLesson(l)} 
-                      className={`w-full text-right p-4 rounded-2xl text-sm transition-all flex items-center gap-3 border ${activeLesson.id === l.id ? 'bg-indigo-600/10 border-indigo-500/50 text-white shadow-[0_0_20px_rgba(79,70,229,0.15)]' : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white'}`}
-                    >
-                      {progress.includes(l.id) ? (
-                        <CheckCircle size={18} className="text-emerald-400 flex-shrink-0"/>
-                      ) : (
-                        <Play size={16} className={`flex-shrink-0 ${activeLesson.id === l.id ? 'text-indigo-400' : 'opacity-40'}`} fill={activeLesson.id === l.id ? 'currentColor' : 'none'}/>
-                      )}
-                      <span className="flex-1 truncate font-medium">{l.title}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-            
-            {!isAdmin && (
-              <div className="pt-6 border-t border-white/10">
-                <button onClick={() => toggleLesson(activeLesson.id)} className={`w-full py-4 rounded-2xl font-bold shadow-xl transition-all flex items-center justify-center gap-2 active:scale-95 ${progress.includes(activeLesson.id) ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-indigo-600 text-white hover:bg-indigo-500 border border-indigo-500'}`}>
-                  <CheckCircle size={20}/>
-                  {progress.includes(activeLesson.id) ? 'تم إكمال المشاهدة' : 'تحديد كـ مكتمل'}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // --- الواجهة الرئيسية للطلاب (Premium Dashboard) ---
-  return (
-    <div className="min-h-screen bg-[#f8fafc] font-sans" dir="rtl">
-      <style>{globalFontStyles}</style>
-      {isAdmin && (
-        <div className="bg-[#0B0F19] text-white p-3 text-center text-xs font-bold flex justify-center items-center gap-4 border-b border-indigo-500/30 shadow-md relative z-50">
-          <ShieldCheck size={16} className="text-emerald-400" />
-          <span className="tracking-wide">وضع المدير مفعل - أنت تتصفح كآدمن</span>
-          <button onClick={() => setView('admin')} className="text-indigo-400 hover:text-white transition-colors bg-white/10 px-3 py-1 rounded-lg ml-2">
-            انتقال للوحة التحكم &rarr;
-          </button>
-        </div>
-      )}
-      
-      <header className="glass-effect border-b border-slate-200/60 p-5 md:px-12 flex justify-between items-center sticky top-0 z-40 shadow-[0_2px_15px_rgb(0,0,0,0.03)]">
-        <button onClick={() => auth.signOut()} className="text-slate-500 hover:text-red-600 flex items-center gap-2 text-sm font-bold bg-white border border-slate-200 px-5 py-2.5 rounded-xl hover:bg-red-50 hover:border-red-200 transition-all active:scale-95 shadow-sm">
-          <LogOut size={18}/> تسجيل خروج
-        </button>
-        <div className="flex items-center gap-4">
-           <div className="text-right hidden md:block">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">مرحباً بك مجدداً</p>
-              <p className="text-sm font-bold text-slate-800">{user.email ? user.email.split('@')[0] : 'User'}</p>
-           </div>
-           <div className="w-12 h-12 bg-gradient-to-tr from-indigo-600 to-blue-500 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/30 text-white">
-              <ShieldAlert size={24}/>
-           </div>
-        </div>
-      </header>
-
-      <main className="p-6 md:p-12 lg:p-20 max-w-[1400px] mx-auto relative">
-        <div className="mb-16 text-center sm:text-right relative z-10">
-          <h2 className="text-4xl md:text-5xl font-black text-slate-900 mb-4 tracking-tight">Pass your <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-500 underline decoration-indigo-200/50 decoration-4 underline-offset-8">license</span></h2>
-          <p className="text-slate-500 text-lg font-medium tracking-tight">منصتك الموثوقة للتعليم الاحترافي والمستمر.</p>
-        </div>
-
-        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-8 md:gap-10 relative z-10">
-          {courses.map(course => {
-             // حساب التقدم
-             let total = 0; let done = 0;
-             course.sections?.forEach(s => {
-               total += (s.lessons?.length || 0);
-               s.lessons?.forEach(l => { if(progress.includes(l.id)) done++; });
-             });
-             const percent = total > 0 ? Math.round((done/total)*100) : 0;
-
-             return (
-               <div key={course.id} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] hover:-translate-y-1.5 transition-all duration-500 overflow-hidden flex flex-col group">
-                 <div className="h-52 bg-gradient-to-br from-indigo-600 to-blue-600 flex items-center justify-center relative overflow-hidden">
-                   <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-all duration-700"></div>
-                   {/* Abstract background for card header */}
-                   <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-                   <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-black/10 rounded-full blur-xl"></div>
-                   
-                   <BookOpen size={70} className="text-white/30 group-hover:text-white/50 group-hover:scale-110 transition-all duration-700 relative z-10" />
-                   
-                   {percent === 100 && (
-                     <div className="absolute top-5 right-5 bg-white/20 backdrop-blur-md border border-white/30 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 z-20">
-                       <CheckCircle size={14}/> دورة مكتملة
-                     </div>
-                   )}
-                 </div>
-                 
-                 <div className="p-8 flex-1 flex flex-col bg-white relative">
-                   <h3 className="font-black text-2xl mb-3 text-slate-800 group-hover:text-indigo-600 transition-colors leading-tight line-clamp-1">{course.title}</h3>
-                   <p className="text-sm text-slate-500 flex-1 leading-relaxed line-clamp-2 font-medium">{course.description}</p>
-                   
-                   <div className="mt-8 mb-8">
-                      <div className="flex justify-between text-xs font-bold text-slate-400 mb-2.5">
-                        <span>نسبة الإنجاز</span>
-                        <span className="text-indigo-600">{percent}%</span>
-                      </div>
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                        <div className="bg-gradient-to-r from-indigo-600 to-blue-500 h-full rounded-full transition-all duration-1000 ease-out relative" style={{ width: `${percent}%` }}>
-                          <div className="absolute top-0 right-0 bottom-0 left-0 bg-white/20 animate-pulse"></div>
-                        </div>
-                      </div>
-                   </div>
-
-                   <button 
-                     onClick={() => {
-                       const first = course.sections?.[0]?.lessons?.[0];
-                       if (first) {
-                         setActiveCourse(course);
-                         setActiveLesson(first);
-                         setView('video');
-                       } else { alert('يرجى الانتظار، لم يتم إضافة محتوى لهذه الدورة بعد.'); }
-                     }}
-                     className="w-full bg-slate-50 hover:bg-indigo-600 text-indigo-700 hover:text-white border border-slate-200 hover:border-indigo-600 py-4 rounded-2xl font-bold shadow-sm hover:shadow-xl hover:shadow-indigo-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                   >
-                     {percent > 0 ? (
-                       <>متابعة التعلم <PlayCircle size={18}/></>
-                     ) : (
-                       <>ابدأ المشاهدة الآن <Play size={18}/></>
-                     )}
-                   </button>
-                 </div>
-               </div>
-             );
-          })}
-          
-          {courses.length === 0 && (
-            <div className="col-span-full py-32 text-center bg-white/50 backdrop-blur-sm rounded-[3rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center">
-               <div className="w-20 h-20 bg-white shadow-sm rounded-full flex items-center justify-center mb-6">
-                 <Video size={36} className="text-slate-300" />
-               </div>
-               <p className="text-slate-800 font-black text-2xl mb-2">مكتبة الدورات فارغة</p>
-               <p className="text-slate-500 font-medium">سيتم مزامنة المحتوى الجديد هنا قريباً.</p>
-            </div>
-          )}
-        </div>
-      </main>
-
-      <style>{`
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #0F1523; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; }
-      `}</style>
-    </div>
-  );
+  return null;
 }

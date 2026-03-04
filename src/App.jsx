@@ -243,11 +243,20 @@ export default function App() {
     }
   };
 
+  // تحسين دالة استخراج رابط يوتيوب لتدعم جميع الأشكال
   const getYoutubeEmbedUrl = (url) => {
     if (!url) return null;
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    
+    // التعبير النمطي (Regex) لالتقاط جميع أشكال روابط يوتيوب:
+    // youtube.com/watch?v=ID
+    // youtu.be/ID
+    // youtube.com/embed/ID
+    // youtube.com/shorts/ID
+    const regExp = /^(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/;
     const match = url.match(regExp);
-    return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}?rel=0&modestbranding=1` : null;
+
+    // إذا وجدنا الـ ID المكون من 11 حرف، نقوم بإرجاع رابط الـ embed الصحيح
+    return (match && match[1]) ? `https://www.youtube.com/embed/${match[1]}?rel=0&modestbranding=1` : null;
   };
 
   const getCourseProgress = (course) => {
@@ -589,13 +598,13 @@ export default function App() {
           <div className="flex-1 flex flex-col relative bg-black overflow-hidden">
             <Watermark email={user.email} />
             
-            <div className="flex-1 w-full h-full relative">
+            <div className="flex-1 w-full h-full relative flex items-center justify-center">
               {youtubeUrl ? (
                 <iframe src={youtubeUrl} className="w-full h-full" allow="autoplay; fullscreen" allowFullScreen></iframe>
               ) : activeLesson.videoUrl ? (
                 <video src={activeLesson.videoUrl} controls controlsList="nodownload" className="w-full h-full object-contain" onContextMenu={e => e.preventDefault()} />
               ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center opacity-30">
+                <div className="flex flex-col items-center justify-center opacity-30">
                    <Video size={64} className="mb-4" />
                    <p className="font-bold">رابط الفيديو غير متوفر</p>
                 </div>

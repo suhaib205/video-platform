@@ -139,9 +139,12 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [courses, setCourses] = useState([]);
-  const [progress, setProgress] = useState([]); 
   
-  const [view, setView] = useState('login'); // login, dashboard, video, admin
+  // Progress & Notes States (Synced from Firebase)
+  const [progress, setProgress] = useState([]); 
+  const [notes, setNotes] = useState({}); 
+  
+  const [view, setView] = useState('login'); 
   const [activeCourse, setActiveCourse] = useState(null);
   const [activeLesson, setActiveLesson] = useState(null);
 
@@ -158,9 +161,11 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
 
-  // Video Player State
+  // Video Player UI State (Strictly decoupled from conditionals to respect Rules of Hooks)
   const [activeTab, setActiveTab] = useState('curriculum'); 
   const [note, setNote] = useState(''); 
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -178,6 +183,7 @@ export default function App() {
     return () => unsub();
   }, []);
 
+  // Fetch Courses
   useEffect(() => {
     if (!user) return;
     const coursesRef = collection(db, 'artifacts', APP_ID, 'public', 'data', 'courses');
@@ -189,24 +195,35 @@ export default function App() {
     return () => unsub();
   }, [user]);
 
+  // Fetch Progress & Notes jointly
   useEffect(() => {
     if (!user || isAdmin) return;
     const progRef = doc(db, 'artifacts', APP_ID, 'users', user.uid, 'settings', 'progress');
     const unsub = onSnapshot(progRef, (d) => {
-      if (d.exists()) setProgress(d.data().completed || []);
+      if (d.exists()) {
+        setProgress(d.data().completed || []);
+        setNotes(d.data().notes || {});
+      }
     }, (err) => {
       console.error("Firestore Error (Progress):", err);
     });
     return () => unsub();
   }, [user, isAdmin]);
 
-  // Reset tab and note when changing view or lesson
+  // Handle Tab Reset on View Change
   useEffect(() => {
     if (view === 'video') {
       setActiveTab('curriculum');
-      setNote('');
     }
-  }, [view, activeLesson?.id]);
+  }, [view]);
+
+  // Handle Note Loading per Lesson
+  useEffect(() => {
+    if (activeLesson) {
+      setNote(notes[activeLesson.id] || '');
+      setSaveSuccess(false);
+    }
+  }, [activeLesson?.id]);
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -236,6 +253,29 @@ export default function App() {
     await setDoc(progRef, {
       completed: isDone ? arrayRemove(lessonId) : arrayUnion(lessonId)
     }, { merge: true });
+  };
+
+  // ✅ دالة حفظ الملاحظات السحابية
+  const saveNoteToDB = async (lessonId, noteText) => {
+    if (isAdmin || !user) return;
+    setIsSavingNote(true);
+    try {
+      const progRef = doc(db, 'artifacts', APP_ID, 'users', user.uid, 'settings', 'progress');
+      const updatedNotes = { ...notes, [lessonId]: noteText };
+      
+      // التحديث المحلي الفوري (Optimistic Update)
+      setNotes(updatedNotes); 
+      
+      // الإرسال لقاعدة البيانات مع دمج البيانات للحفاظ على تقدم الدرس
+      await setDoc(progRef, { notes: updatedNotes }, { merge: true });
+      
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (error) {
+      console.error("Error saving note:", error);
+    } finally {
+      setIsSavingNote(false);
+    }
   };
 
   const saveCourse = async (courseData) => {
@@ -547,8 +587,8 @@ export default function App() {
       <div className="h-screen flex flex-col bg-[#0B0F19] text-slate-200 font-sans" dir={isRTL ? "rtl" : "ltr"}>
         <style>{globalFontStyles}</style>
         <header className="p-4 px-6 border-b border-white/10 flex justify-between items-center bg-[#0B0F19] z-20">
-          <button onClick={() => { setActiveCourse(null); setView('dashboard'); }} className="text-slate-400 hover:text-white font-bold flex items-center gap-2 transition-colors">
-            {isRTL ? <ArrowRight size={18}/> : <ArrowLeft size={18}/>} {isRTL ? 'العودة للمسارات' : 'Back to Courses'}
+          <button onClick={() => setView('dashboard')} className="text-slate-400 hover:text-white font-bold flex items-center gap-2 transition-colors">
+            {isRTL ? <ArrowRight size={18}/> : <ArrowLeft size={18}/>} عودة للمسارات
           </button>
           <div className="text-center hidden md:block">
             <h1 className="font-bold text-white text-lg">{activeCourse.title}</h1>
@@ -630,15 +670,33 @@ export default function App() {
                 </div>
               )}
 
+              {/* ✅ واجهة الملاحظات المحدثة التي تتصل بقاعدة البيانات */}
               {activeTab === 'notes' && (
                 <div className="p-6 h-full flex flex-col">
                   <h3 className="font-bold text-white mb-4 flex items-center gap-2"><FileText size={18}/> {t.notes}</h3>
-                  <textarea 
-                    className="flex-1 w-full bg-black/30 border border-white/10 rounded-xl p-4 text-sm outline-none focus:border-indigo-500 text-white resize-none"
-                    placeholder={isRTL ? "اكتب ملاحظاتك هنا للرجوع إليها لاحقاً..." : "Type your notes here..."}
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                  ></textarea>
+                  <div className="flex-1 flex flex-col bg-white/5 border border-white/10 rounded-xl focus-within:border-indigo-500/50 transition-all overflow-hidden shadow-inner">
+                    <textarea 
+                      className="flex-1 w-full bg-transparent p-4 text-sm outline-none text-white resize-none"
+                      placeholder={isRTL ? "اكتب ملاحظاتك هنا، سيتم حفظها في السحابة للرجوع إليها لاحقاً..." : "Type your notes here..."}
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      onBlur={() => saveNoteToDB(activeLesson.id, note)}
+                    ></textarea>
+                    
+                    <div className="bg-black/40 px-4 py-3 flex justify-between items-center border-t border-white/10">
+                      <span className="text-[10px] text-slate-400 font-medium tracking-wide">
+                        {isSavingNote ? 'جاري المزامنة...' : saveSuccess ? 'تم الحفظ في السحابة ✅' : 'يتم الحفظ تلقائياً'}
+                      </span>
+                      <button 
+                        onClick={() => saveNoteToDB(activeLesson.id, note)}
+                        disabled={isSavingNote}
+                        className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors disabled:opacity-50"
+                      >
+                        {isSavingNote ? <Activity size={14} className="animate-spin"/> : <CheckCircle size={14}/>}
+                        {isSavingNote ? 'جاري الحفظ...' : 'حفظ'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
